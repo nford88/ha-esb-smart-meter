@@ -96,6 +96,9 @@ config/
       manifest.json
       sensor.py
       services.yaml
+      strings.json
+      translations/
+        en.json
 ```
 
 ## YAML Configuration
@@ -183,3 +186,7 @@ Thanks to both creators for publishing their work.
 
 This project is unofficial and is not affiliated with, endorsed by, or supported
 by ESB Networks or Home Assistant.
+
+## License
+
+Released under the [MIT License](LICENSE).

@@ -43,21 +43,18 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="last_import",
         translation_key="last_import",
-        name="Last Import",
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda data: data.get("last_import"),
     ),
     ESBSensorDescription(
         key="last_reading",
         translation_key="last_reading",
-        name="Last Reading",
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda data: _as_local_timestamp(data.get("last_reading")),
     ),
     ESBSensorDescription(
         key="records",
         translation_key="records",
-        name="Records",
         icon="mdi:table",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("records", 0),
@@ -65,7 +62,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="coverage_days",
         translation_key="coverage_days",
-        name="Coverage Days",
         icon="mdi:calendar-range",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("coverage_days", 0),
@@ -73,7 +69,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="latest_interval_energy",
         translation_key="latest_interval_energy",
-        name="Latest Interval Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: _round(data.get("last_interval_kwh")),
@@ -81,7 +76,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="total_import",
         translation_key="total_import",
-        name="Total Import",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -90,7 +84,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="today_energy",
         translation_key="today_energy",
-        name="Today Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -99,7 +92,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="today_cheap_energy",
         translation_key="today_cheap_energy",
-        name="Today Cheap Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -108,7 +100,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="today_night_energy",
         translation_key="today_night_energy",
-        name="Today Night Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -117,7 +108,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="today_day_energy",
         translation_key="today_day_energy",
-        name="Today Day Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -126,7 +116,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="today_peak_energy",
         translation_key="today_peak_energy",
-        name="Today Peak Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -135,7 +124,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="today_cost",
         translation_key="today_cost",
-        name="Today Cost",
         native_unit_of_measurement="EUR",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -144,7 +132,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="yesterday_energy",
         translation_key="yesterday_energy",
-        name="Yesterday Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -153,7 +140,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="yesterday_cost",
         translation_key="yesterday_cost",
-        name="Yesterday Cost",
         native_unit_of_measurement="EUR",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -162,7 +148,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="month_energy",
         translation_key="month_energy",
-        name="Month Energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -171,7 +156,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="month_cost",
         translation_key="month_cost",
-        name="Month Cost",
         native_unit_of_measurement="EUR",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -180,14 +164,12 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="current_rate_bucket",
         translation_key="current_rate_bucket",
-        name="Current Rate Bucket",
         icon="mdi:clock-outline",
         value_fn=lambda data: data.get("current_bucket"),
     ),
     ESBSensorDescription(
         key="current_rate",
         translation_key="current_rate",
-        name="Current Rate",
         native_unit_of_measurement="EUR/kWh",
         icon="mdi:cash",
         state_class=SensorStateClass.MEASUREMENT,

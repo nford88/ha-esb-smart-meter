@@ -1,5 +1,6 @@
 {
   "name": "ESB Smart Meter",
   "render_readme": true,
-  "country": "IE"
+  "country": "IE",
+  "homeassistant": "2024.4.0"
 }

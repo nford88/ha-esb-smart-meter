@@ -79,6 +79,10 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             DEFAULT_CHEAP_END,
         )
         self.rates = DEFAULT_RATES | dict(entry.data.get(CONF_RATES, {}))
+        # High-water mark so the TOTAL_INCREASING "total import" sensor never
+        # drops (e.g. if a CSV is removed from the folder), which the Energy
+        # dashboard would otherwise read as a meter reset.
+        self._total_high_water = 0.0
         super().__init__(
             hass,
             LOGGER,
@@ -133,6 +137,18 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         coverage_days = (readings[-1].when.date() - readings[0].when.date()).days + 1
         current_bucket = self._bucket_for(now.time())
+
+        total_kwh = round(total_kwh, 3)
+        if total_kwh < self._total_high_water:
+            LOGGER.debug(
+                "Computed total import %.3f kWh is below previous high-water "
+                "mark %.3f kWh (CSV removed?); holding the higher value",
+                total_kwh,
+                self._total_high_water,
+            )
+            total_kwh = self._total_high_water
+        else:
+            self._total_high_water = total_kwh
 
         return {
             "available": True,
@@ -190,16 +206,24 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return []
 
     def _bucket_for(self, value: time) -> str:
-        """Return the configured rate bucket for a local time."""
+        """Return the configured rate bucket for a local time.
+
+        The bands follow the standard ESB smart tariff and are contiguous, so
+        every half-hour maps to exactly one bucket (cheap + night + day + peak
+        always sum to the total):
+
+            cheap  configurable window (default 02:00-04:00), overrides night
+            peak   17:00-19:00
+            night  23:00-08:00 (wraps midnight)
+            day    08:00-17:00 and 19:00-23:00
+        """
         if _time_in_range(value, self.cheap_start, self.cheap_end):
             return "cheap"
-        if time(17, 0) <= value <= time(18, 30):
+        if time(17, 0) <= value < time(19, 0):
             return "peak"
-        if time(0, 0) <= value <= time(7, 30) or time(23, 0) <= value <= time(23, 30):
+        if value >= time(23, 0) or value < time(8, 0):
             return "night"
-        if time(8, 0) <= value <= time(16, 30) or time(19, 0) <= value <= time(22, 30):
-            return "day"
-        return "other"
+        return "day"
 
 
 def _empty_bucket_totals() -> dict[str, Any]:
