@@ -19,6 +19,7 @@
           "peak_end": "Peak rate end time",
           "currency": "Currency",
           "standing_charge": "Daily standing charge",
+          "export_rate": "Export / feed-in rate (per kWh)",
           "cheap_rate": "Cheap rate",
           "night_rate": "Night rate",
           "day_rate": "Day rate",
@@ -47,6 +48,7 @@
           "peak_end": "Peak rate end time",
           "currency": "Currency",
           "standing_charge": "Daily standing charge",
+          "export_rate": "Export / feed-in rate (per kWh)",
           "cheap_rate": "Cheap rate",
           "night_rate": "Night rate",
           "day_rate": "Day rate",
@@ -94,7 +96,13 @@
       "last_7_complete_day_cost": { "name": "Cost, last 7 complete days" },
       "last_7_complete_day_energy": { "name": "Energy, last 7 complete days" },
       "average_daily_cost_7_day": { "name": "Average daily cost (7 day)" },
-      "average_daily_energy_7_day": { "name": "Average daily energy (7 day)" }
+      "average_daily_energy_7_day": { "name": "Average daily energy (7 day)" },
+      "total_export": { "name": "Total export" },
+      "today_export_energy": { "name": "Today export" },
+      "yesterday_export_energy": { "name": "Yesterday export" },
+      "month_export_energy": { "name": "Month export" },
+      "today_export_credit": { "name": "Today export credit" },
+      "month_export_credit": { "name": "Month export credit" }
     }
   },
   "services": {

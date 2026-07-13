@@ -22,6 +22,7 @@ from .const import (
     CONF_CHEAP_START,
     CONF_CURRENCY,
     CONF_DAY_START,
+    CONF_EXPORT_RATE,
     CONF_IMPORT_PATH,
     CONF_MPRN,
     CONF_NIGHT_START,
@@ -36,6 +37,7 @@ from .const import (
     DEFAULT_CHEAP_START,
     DEFAULT_CURRENCY,
     DEFAULT_DAY_START,
+    DEFAULT_EXPORT_RATE,
     DEFAULT_IMPORT_PATH,
     DEFAULT_NIGHT_START,
     DEFAULT_PEAK_END,
@@ -44,8 +46,10 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_STANDING_CHARGE,
     DEFAULT_TIME_SHIFT_MINUTES,
+    EXPORT_KEYWORD,
     INTERVALS_PER_DAY,
     RATE_BUCKETS,
+    READTYPE_COLUMNS,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -73,6 +77,7 @@ class Reading:
     when: datetime
     kwh: float
     source: str
+    kind: str = "import"  # "import" or "export"
 
 
 class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -82,6 +87,7 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Initialize the coordinator."""
         self.entry = entry
         self._total_high_water = 0.0
+        self._export_high_water = 0.0
         self._reload_settings()
         super().__init__(
             hass,
@@ -125,6 +131,7 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.standing_charge = float(
             self._conf(CONF_STANDING_CHARGE, DEFAULT_STANDING_CHARGE)
         )
+        self.export_rate = float(self._conf(CONF_EXPORT_RATE, DEFAULT_EXPORT_RATE))
 
     def has_download_credentials(self) -> bool:
         """Return True if ESB portal download is configured."""
@@ -176,21 +183,27 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _read_data(self) -> dict[str, Any]:
         """Read CSV data from disk and derive period totals."""
         self.import_path.mkdir(parents=True, exist_ok=True)
-        readings = self._load_readings()
+        all_readings = self._load_readings()
         now = dt_util.now()
 
-        if not readings:
+        import_readings = [r for r in all_readings if r.kind == "import"]
+        export_readings = [r for r in all_readings if r.kind == "export"]
+        export_block = self._export_block(export_readings, now)
+
+        if not import_readings:
             current_bucket = self._bucket_for(now)
             return {
                 "available": False,
                 "records": 0,
-                "files": [],
+                "files": sorted({r.source for r in all_readings}),
                 "last_import": now,
                 "current_bucket": current_bucket,
                 "current_rate": self._rate(current_bucket),
                 "message": f"No ESB CSV rows found in {self.import_path}",
+                **export_block,
             }
 
+        readings = import_readings
         readings.sort(key=lambda item: item.when)
         latest = readings[-1]
         today = now.date()
@@ -295,14 +308,15 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "month_complete_day_count": len(month_complete_days),
             "projected_month_cost": projected_month_cost,
             "message": "OK",
+            **export_block,
         }
 
     def costed_readings(self) -> list[tuple[datetime, float, float]]:
         """Return (when, kwh, cost) for every reading, sorted by time.
 
-        Used by the statistics backfill. Runs the same parsing as a refresh.
+        Used by the statistics backfill. Import readings only (consumption).
         """
-        readings = self._load_readings()
+        readings = [r for r in self._load_readings() if r.kind == "import"]
         readings.sort(key=lambda item: item.when)
         return [
             (r.when, r.kwh, r.kwh * self._rate(self._bucket_for(r.when)))
@@ -342,10 +356,15 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         history = self.import_path / "esb_smart_meter_history.csv"
         with history.open("w", newline="", encoding="utf-8") as file_obj:
             writer = csv.writer(file_obj)
-            writer.writerow(["Read Date and End Time", "Read Value"])
+            writer.writerow(["Read Date and End Time", "Read Value", "Read Type"])
             for reading in kept:
                 raw = (reading.when - shift).strftime("%d-%m-%Y %H:%M")
-                writer.writerow([raw, f"{reading.kwh}"])
+                read_type = (
+                    "Active Export Interval (kW)"
+                    if reading.kind == "export"
+                    else "Active Import Interval (kW)"
+                )
+                writer.writerow([raw, f"{reading.kwh}", read_type])
 
         LOGGER.info(
             "Pruned ESB readings: kept %s of %s (keep_days=%s); originals in %s",
@@ -363,6 +382,43 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _rate(self, bucket: str) -> float:
         """Return the configured rate for a bucket, falling back to 'other'."""
         return self.rates.get(bucket, self.rates.get("other", 0.0))
+
+    def _export_block(
+        self, readings: list[Reading], now: datetime
+    ) -> dict[str, Any]:
+        """Aggregate microgeneration/export readings (kWh) and feed-in credit."""
+        today = now.date()
+        yesterday = today - timedelta(days=1)
+        month_start = today.replace(day=1)
+
+        total = today_kwh = yesterday_kwh = month_kwh = 0.0
+        for reading in readings:
+            total += reading.kwh
+            day = reading.when.date()
+            if day == today:
+                today_kwh += reading.kwh
+            elif day == yesterday:
+                yesterday_kwh += reading.kwh
+            if month_start <= day <= today:
+                month_kwh += reading.kwh
+
+        total = round(total, 3)
+        if total < self._export_high_water:
+            total = self._export_high_water
+        else:
+            self._export_high_water = total
+
+        rate = self.export_rate
+        return {
+            "has_export": bool(readings),
+            "total_export_kwh": total,
+            "today_export_kwh": round(today_kwh, 3),
+            "yesterday_export_kwh": round(yesterday_kwh, 3),
+            "month_export_kwh": round(month_kwh, 3),
+            "today_export_credit": round(today_kwh * rate, 3),
+            "yesterday_export_credit": round(yesterday_kwh * rate, 3),
+            "month_export_credit": round(month_kwh * rate, 3),
+        }
 
     def _finalize_period(
         self, period: dict[str, float] | None, *, days: int
@@ -382,12 +438,16 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return result
 
     def _load_readings(self) -> list[Reading]:
-        """Load valid readings from all CSV files in the import folder."""
-        by_timestamp: dict[datetime, Reading] = {}
+        """Load valid readings from all CSV files in the import folder.
+
+        Deduplicated by (timestamp, kind) so import and export readings for the
+        same half hour are both kept.
+        """
+        by_key: dict[tuple[datetime, str], Reading] = {}
         for csv_path in sorted(self.import_path.glob("*.csv")):
             for reading in self._read_csv(csv_path):
-                by_timestamp[reading.when] = reading
-        return list(by_timestamp.values())
+                by_key[(reading.when, reading.kind)] = reading
+        return list(by_key.values())
 
     def _read_csv(self, csv_path: Path) -> list[Reading]:
         """Read a single CSV file if it looks like an ESB interval file."""
@@ -403,6 +463,7 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 value_col = _find_column(reader.fieldnames, VALUE_COLUMNS)
                 if datetime_col is None or value_col is None:
                     return []
+                readtype_col = _find_column(reader.fieldnames, READTYPE_COLUMNS)
 
                 readings: list[Reading] = []
                 for row in reader:
@@ -412,8 +473,18 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         continue
                     if self.time_shift:
                         when += timedelta(minutes=self.time_shift)
+                    kind = "import"
+                    if readtype_col and EXPORT_KEYWORD in row.get(
+                        readtype_col, ""
+                    ).lower():
+                        kind = "export"
                     readings.append(
-                        Reading(when=_as_local(when), kwh=kwh, source=csv_path.name)
+                        Reading(
+                            when=_as_local(when),
+                            kwh=kwh,
+                            source=csv_path.name,
+                            kind=kind,
+                        )
                     )
                 return readings
         except Exception as err:  # noqa: BLE001 - keep one bad CSV from killing HA setup

@@ -17,6 +17,7 @@ from .const import (
     CONF_CHEAP_START,
     CONF_CURRENCY,
     CONF_DAY_START,
+    CONF_EXPORT_RATE,
     CONF_IMPORT_PATH,
     CONF_KEEP_DAYS,
     CONF_MPRN,
@@ -32,6 +33,7 @@ from .const import (
     DEFAULT_CHEAP_START,
     DEFAULT_CURRENCY,
     DEFAULT_DAY_START,
+    DEFAULT_EXPORT_RATE,
     DEFAULT_IMPORT_PATH,
     DEFAULT_KEEP_DAYS,
     DEFAULT_NIGHT_START,
@@ -81,6 +83,9 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_CURRENCY, default=DEFAULT_CURRENCY): cv.string,
                 vol.Optional(
                     CONF_STANDING_CHARGE, default=DEFAULT_STANDING_CHARGE
+                ): vol.Coerce(float),
+                vol.Optional(
+                    CONF_EXPORT_RATE, default=DEFAULT_EXPORT_RATE
                 ): vol.Coerce(float),
                 vol.Optional(CONF_RATES, default=DEFAULT_RATES): RATE_SCHEMA,
                 vol.Optional(CONF_USERNAME): cv.string,

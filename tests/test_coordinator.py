@@ -7,6 +7,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.esb_smart_meter.const import (
+    CONF_EXPORT_RATE,
     CONF_IMPORT_PATH,
     CONF_RATES,
     CONF_STANDING_CHARGE,
@@ -105,6 +106,22 @@ async def test_total_never_drops(hass, tmp_path):
     )
     second = await coordinator._async_update_data()
     assert second["total_import_kwh"] == pytest.approx(2.0)
+
+
+async def test_import_export_split(hass, tmp_path):
+    (tmp_path / "e.csv").write_text(
+        "MPRN,Meter Serial Number,Read Value,Read Type,Read Date and End Time\n"
+        "10,1,2.000,Active Import Interval (kW),01-01-2026 12:00\n"
+        "10,1,0.500,Active Export Interval (kW),01-01-2026 12:00\n",
+        encoding="utf-8",
+    )
+    coordinator = ESBSmartMeterCoordinator(hass, _entry(tmp_path, **{CONF_EXPORT_RATE: 0.2}))
+    data = await coordinator._async_update_data()
+    # Import and export share a timestamp; both survive dedup.
+    assert data["records"] == 1
+    assert data["total_import_kwh"] == pytest.approx(2.0)
+    assert data["has_export"] is True
+    assert data["total_export_kwh"] == pytest.approx(0.5)
 
 
 def _full_day_csv(day) -> str:

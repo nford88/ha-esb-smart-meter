@@ -17,6 +17,7 @@ CONF_PEAK_END = "peak_end"
 CONF_RATES = "rates"
 CONF_CURRENCY = "currency"
 CONF_STANDING_CHARGE = "standing_charge"
+CONF_EXPORT_RATE = "export_rate"
 
 # Optional ESB Networks portal download (opt-in)
 CONF_USERNAME = "username"
@@ -36,6 +37,8 @@ DEFAULT_PEAK_START = "17:00"
 DEFAULT_PEAK_END = "19:00"
 DEFAULT_CURRENCY = "EUR"
 DEFAULT_STANDING_CHARGE = 0.0
+# Feed-in tariff / microgeneration export payment, in currency units per kWh.
+DEFAULT_EXPORT_RATE = 0.0
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=30)
 
 # Rate buckets, in currency units per kWh.
@@ -54,6 +57,11 @@ RATE_BUCKETS = ("cheap", "night", "day", "peak")
 
 # Number of half-hour intervals in a complete day.
 INTERVALS_PER_DAY = 48
+
+# ESB HDF "Read Type" column: rows are tagged import or export. A single export
+# contains both when the meter has microgeneration.
+READTYPE_COLUMNS = ("Read Type", "read_type", "read type")
+EXPORT_KEYWORD = "export"
 
 # External-statistics identifiers used for the Energy dashboard backfill.
 STAT_ENERGY_SUFFIX = "import_energy"

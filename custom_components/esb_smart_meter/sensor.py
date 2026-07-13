@@ -201,8 +201,35 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ),
 )
 
+# Export / microgeneration sensors, only added when export data is present or a
+# feed-in (export) rate is configured.
+EXPORT_SENSORS: tuple[ESBSensorDescription, ...] = (
+    ESBSensorDescription(
+        key="total_export",
+        translation_key="total_export",
+        native_unit_of_measurement=KWH,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: _round(data.get("total_export_kwh")),
+    ),
+    _energy("today_export_energy", "today_export_energy",
+            lambda data: _round(data.get("today_export_kwh"))),
+    _energy("yesterday_export_energy", "yesterday_export_energy",
+            lambda data: _round(data.get("yesterday_export_kwh"))),
+    _energy("month_export_energy", "month_export_energy",
+            lambda data: _round(data.get("month_export_kwh"))),
+    _cost("today_export_credit", "today_export_credit",
+          lambda data: _round(data.get("today_export_credit"))),
+    _cost("month_export_credit", "month_export_credit",
+          lambda data: _round(data.get("month_export_credit"))),
+)
+
 # Sensors whose native unit is the configured currency.
-_MONETARY_KEYS = {d.key for d in SENSORS if d.device_class == SensorDeviceClass.MONETARY}
+_MONETARY_KEYS = {
+    d.key
+    for d in (*SENSORS, *EXPORT_SENSORS)
+    if d.device_class == SensorDeviceClass.MONETARY
+}
 
 # Diagnostic sensors that stay available even before any CSV data is found.
 _ALWAYS_AVAILABLE = {
@@ -221,8 +248,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up ESB Smart Meter sensors."""
     coordinator: ESBSmartMeterCoordinator = hass.data[DOMAIN][entry.entry_id]
+    descriptions = list(SENSORS)
+    data = coordinator.data or {}
+    if data.get("has_export") or coordinator.export_rate:
+        descriptions += list(EXPORT_SENSORS)
     async_add_entities(
-        ESBSmartMeterSensor(coordinator, entry, description) for description in SENSORS
+        ESBSmartMeterSensor(coordinator, entry, description)
+        for description in descriptions
     )
 
 

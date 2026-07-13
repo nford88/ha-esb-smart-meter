@@ -214,6 +214,18 @@ diagnostic sensors remain available even when no CSV data has been found.
 | `esb_smart_meter.import_statistics` | Backfill CSV history into the Energy dashboard.          |
 | `esb_smart_meter.prune`             | Consolidate/trim the CSV folder to the most recent days. |
 
+## Solar export / microgeneration
+
+If your meter exports to the grid, the ESB HDF export contains
+`Active Export Interval (kW)` rows alongside the import rows. The integration
+splits them automatically and adds export sensors: **Total export**, **Today /
+Yesterday / Month export**, and — if you set an **Export / feed-in rate** —
+**Today / Month export credit**.
+
+Export sensors only appear once export rows are present **or** you configure an
+export rate (so import-only accounts stay uncluttered). Set `export_rate` in
+YAML or via the options flow to activate them.
+
 ## Housekeeping (prune)
 
 Reading history is cheap (thousands of half-hourly rows parse in milliseconds),
