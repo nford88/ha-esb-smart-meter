@@ -107,6 +107,44 @@ async def test_total_never_drops(hass, tmp_path):
     assert second["total_import_kwh"] == pytest.approx(2.0)
 
 
+def _full_day_csv(day) -> str:
+    lines = ["Read Date and End Time,Read Value"]
+    for hour in range(24):
+        for minute in (0, 30):
+            lines.append(f"{day.strftime('%d-%m-%Y')} {hour:02d}:{minute:02d},0.100")
+    return "\n".join(lines) + "\n"
+
+
+async def test_recent_complete_day(hass, tmp_path):
+    from datetime import timedelta
+
+    yesterday = dt_util.now().date() - timedelta(days=1)
+    (tmp_path / "y.csv").write_text(_full_day_csv(yesterday), encoding="utf-8")
+    coordinator = ESBSmartMeterCoordinator(hass, _entry(tmp_path))
+    data = await coordinator._async_update_data()
+    assert data["recent_complete_date"] == yesterday
+    assert data["recent_complete"]["total_kwh"] == pytest.approx(4.8)  # 48 * 0.1
+
+
+async def test_prune_keeps_recent_and_backs_up(hass, tmp_path):
+    (tmp_path / "multi.csv").write_text(
+        "Read Date and End Time,Read Value\n"
+        "01-01-2026 12:00,1.000\n"
+        "02-01-2026 12:00,1.000\n"
+        "03-01-2026 12:00,1.000\n",
+        encoding="utf-8",
+    )
+    coordinator = ESBSmartMeterCoordinator(hass, _entry(tmp_path))
+    result = await hass.async_add_executor_job(coordinator._prune, 1)
+    assert result == {"before": 3, "after": 2, "removed": 1}
+    assert (tmp_path / "pruned_backup").is_dir()
+    assert (tmp_path / "esb_smart_meter_history.csv").exists()
+
+    # The consolidated file must re-read to exactly the kept rows.
+    data = await coordinator._async_update_data()
+    assert data["records"] == 2
+
+
 async def test_time_shift_applied(hass, tmp_path):
     (tmp_path / "s.csv").write_text(
         "Read Date and End Time,Read Value\n01-01-2026 00:00,1.000\n",

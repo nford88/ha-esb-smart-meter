@@ -210,8 +210,18 @@ diagnostic sensors remain available even when no CSV data has been found.
 | Service                             | What it does                                             |
 | ----------------------------------- | -------------------------------------------------------- |
 | `esb_smart_meter.reload`            | Re-scan the CSV folder and refresh all sensors.          |
-| `esb_smart_meter.download_latest`          | Log in to ESB Networks and download the latest CSV.      |
+| `esb_smart_meter.download_latest`   | Log in to ESB Networks and download the latest CSV.      |
 | `esb_smart_meter.import_statistics` | Backfill CSV history into the Energy dashboard.          |
+| `esb_smart_meter.prune`             | Consolidate/trim the CSV folder to the most recent days. |
+
+## Housekeeping (prune)
+
+Reading history is cheap (thousands of half-hourly rows parse in milliseconds),
+so trimming is optional. If you want to tidy the import folder, call
+`esb_smart_meter.prune` with a `keep_days` value (default 90). It consolidates
+everything into a single `esb_smart_meter_history.csv`, keeping only the most
+recent days, and **moves the original files into a `pruned_backup` subfolder**
+(nothing is hard-deleted). The lifetime **Total import** sensor is unaffected.
 
 ## Automatic download (optional)
 

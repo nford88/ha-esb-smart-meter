@@ -60,10 +60,13 @@
     "sensor": {
       "last_import": { "name": "Last import" },
       "last_reading": { "name": "Last reading" },
+      "last_reading_age": { "name": "Last reading age" },
       "records": { "name": "Records" },
       "coverage_days": { "name": "Coverage days" },
       "latest_interval_energy": { "name": "Latest interval energy" },
       "total_import": { "name": "Total import" },
+      "current_rate_bucket": { "name": "Current rate bucket" },
+      "current_rate": { "name": "Current rate" },
       "today_energy": { "name": "Today energy" },
       "today_cheap_energy": { "name": "Today cheap energy" },
       "today_night_energy": { "name": "Today night energy" },
@@ -74,10 +77,24 @@
       "yesterday_cost": { "name": "Yesterday cost" },
       "month_energy": { "name": "Month energy" },
       "month_cost": { "name": "Month cost" },
+      "month_cheap_cost": { "name": "Month cheap cost" },
+      "month_night_cost": { "name": "Month night cost" },
+      "month_day_cost": { "name": "Month day cost" },
+      "month_complete_days": { "name": "Month complete days" },
       "projected_month_cost": { "name": "Projected month cost" },
-      "last_7_average_daily_cost": { "name": "7-day average daily cost" },
-      "current_rate_bucket": { "name": "Current rate bucket" },
-      "current_rate": { "name": "Current rate" }
+      "recent_complete_date": { "name": "Most recent complete date" },
+      "recent_complete_energy": { "name": "Most recent complete day energy" },
+      "recent_complete_cost": { "name": "Most recent complete day cost" },
+      "recent_complete_cheap_energy": { "name": "Most recent complete day cheap energy" },
+      "recent_complete_cheap_cost": { "name": "Most recent complete day cheap cost" },
+      "recent_complete_night_energy": { "name": "Most recent complete day night energy" },
+      "recent_complete_night_cost": { "name": "Most recent complete day night cost" },
+      "recent_complete_day_energy": { "name": "Most recent complete day day energy" },
+      "recent_complete_day_cost": { "name": "Most recent complete day day cost" },
+      "last_7_complete_day_cost": { "name": "Cost, last 7 complete days" },
+      "last_7_complete_day_energy": { "name": "Energy, last 7 complete days" },
+      "average_daily_cost_7_day": { "name": "Average daily cost (7 day)" },
+      "average_daily_energy_7_day": { "name": "Average daily energy (7 day)" }
     }
   },
   "services": {
@@ -92,6 +109,16 @@
     "import_statistics": {
       "name": "Import history into statistics",
       "description": "Backfill available CSV history into long-term statistics so past usage and cost appear on the Energy dashboard."
+    },
+    "prune": {
+      "name": "Prune old readings",
+      "description": "Consolidate the import folder into a single tidy CSV, keeping only the most recent days. Originals are moved to a backup subfolder.",
+      "fields": {
+        "keep_days": {
+          "name": "Keep days",
+          "description": "Number of most-recent days of readings to keep."
+        }
+      }
     }
   },
   "issues": {

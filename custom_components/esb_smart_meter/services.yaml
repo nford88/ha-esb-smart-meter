@@ -16,3 +16,21 @@ import_statistics:
     Backfill all available CSV history into Home Assistant long-term statistics
     so past usage and cost appear on the Energy dashboard. Safe to run again;
     existing points are updated in place.
+
+prune:
+  name: Prune old readings
+  description: >-
+    Consolidate the import folder into a single tidy CSV, keeping only the most
+    recent days. Original files are moved to a 'pruned_backup' subfolder (never
+    hard-deleted). The lifetime Total import sensor is unaffected.
+  fields:
+    keep_days:
+      name: Keep days
+      description: Number of most-recent days of readings to keep.
+      default: 90
+      selector:
+        number:
+          min: 1
+          max: 1095
+          unit_of_measurement: days
+          mode: box

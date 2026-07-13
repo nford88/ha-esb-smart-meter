@@ -18,6 +18,7 @@ from .const import (
     CONF_CURRENCY,
     CONF_DAY_START,
     CONF_IMPORT_PATH,
+    CONF_KEEP_DAYS,
     CONF_MPRN,
     CONF_NIGHT_START,
     CONF_PASSWORD,
@@ -32,6 +33,7 @@ from .const import (
     DEFAULT_CURRENCY,
     DEFAULT_DAY_START,
     DEFAULT_IMPORT_PATH,
+    DEFAULT_KEEP_DAYS,
     DEFAULT_NIGHT_START,
     DEFAULT_PEAK_END,
     DEFAULT_PEAK_START,
@@ -42,6 +44,7 @@ from .const import (
     PLATFORMS,
     SERVICE_DOWNLOAD,
     SERVICE_IMPORT_STATISTICS,
+    SERVICE_PRUNE,
     SERVICE_RELOAD,
 )
 from .coordinator import ESBSmartMeterCoordinator
@@ -135,10 +138,35 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         for coordinator in _coordinators(hass):
             await async_backfill_statistics(hass, coordinator)
 
+    async def handle_prune(call: ServiceCall) -> None:
+        """Trim stored readings to the most recent keep_days."""
+        keep_days = call.data.get(CONF_KEEP_DAYS, DEFAULT_KEEP_DAYS)
+        for coordinator in _coordinators(hass):
+            result = await coordinator.async_prune(keep_days)
+            LOGGER.info(
+                "ESB prune (%s): kept %s, removed %s of %s readings",
+                coordinator.name,
+                result["after"],
+                result["removed"],
+                result["before"],
+            )
+
     hass.services.async_register(DOMAIN, SERVICE_RELOAD, handle_reload)
     hass.services.async_register(DOMAIN, SERVICE_DOWNLOAD, handle_download)
     hass.services.async_register(
         DOMAIN, SERVICE_IMPORT_STATISTICS, handle_import_statistics
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PRUNE,
+        handle_prune,
+        schema=vol.Schema(
+            {
+                vol.Optional(CONF_KEEP_DAYS, default=DEFAULT_KEEP_DAYS): vol.All(
+                    vol.Coerce(int), vol.Range(min=1)
+                )
+            }
+        ),
     )
     return True
 

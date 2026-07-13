@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import shutil
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -219,8 +220,12 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _merge_period(month_raw, periods[day])
         month_period = self._finalize_period(month_raw, days=len(month_days))
 
+        # "Complete" days have a full set of half-hour intervals and exclude
+        # today (still in progress).
         complete_dates = sorted(
-            day for day, count in reading_counts.items() if count >= INTERVALS_PER_DAY
+            day
+            for day, count in reading_counts.items()
+            if count >= INTERVALS_PER_DAY and day < today
         )
         last_7 = [
             _period_summary(day, self._finalize_period(periods[day], days=1))
@@ -228,6 +233,11 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ]
         last_7_cost = round(sum(item["cost"] for item in last_7), 3)
         last_7_kwh = round(sum(item["total_kwh"] for item in last_7), 3)
+
+        recent_complete_date = complete_dates[-1] if complete_dates else None
+        recent_complete = self._finalize_period(
+            periods.get(recent_complete_date) if recent_complete_date else None, days=1
+        )
 
         month_complete_days = [d for d in complete_dates if month_start <= d <= today]
         days_in_month = _days_in_month(today)
@@ -271,10 +281,15 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "today": today_period,
             "yesterday": yesterday_period,
             "month": month_period,
+            "recent_complete_date": recent_complete_date,
+            "recent_complete": recent_complete,
             "last_7_complete_days": last_7,
             "last_7_cost": last_7_cost,
             "last_7_energy": last_7_kwh,
             "last_7_average_daily_cost": round(last_7_cost / len(last_7), 3)
+            if last_7
+            else 0.0,
+            "last_7_average_daily_energy": round(last_7_kwh / len(last_7), 3)
             if last_7
             else 0.0,
             "month_complete_day_count": len(month_complete_days),
@@ -293,6 +308,57 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             (r.when, r.kwh, r.kwh * self._rate(self._bucket_for(r.when)))
             for r in readings
         ]
+
+    async def async_prune(self, keep_days: int) -> dict[str, int]:
+        """Trim stored readings to the most recent ``keep_days``, then refresh."""
+        result = await self.hass.async_add_executor_job(self._prune, keep_days)
+        await self.async_request_refresh()
+        return result
+
+    def _prune(self, keep_days: int) -> dict[str, int]:
+        """Consolidate readings into one CSV keeping only recent days (executor).
+
+        Originals are moved into a ``pruned_backup`` subfolder (nothing is hard
+        deleted), and timestamps are written back un-shifted so the regular
+        time-shift re-applies cleanly on the next read. The lifetime
+        ``total_import`` sensor is unaffected thanks to the high-water mark.
+        """
+        keep_days = max(1, int(keep_days))
+        readings = self._load_readings()
+        if not readings:
+            return {"before": 0, "after": 0, "removed": 0}
+
+        readings.sort(key=lambda item: item.when)
+        cutoff = readings[-1].when.date() - timedelta(days=keep_days)
+        kept = [r for r in readings if r.when.date() >= cutoff]
+
+        backup_dir = self.import_path / "pruned_backup"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = dt_util.now().strftime("%Y%m%d_%H%M%S")
+        for csv_path in sorted(self.import_path.glob("*.csv")):
+            shutil.move(str(csv_path), str(backup_dir / f"{stamp}_{csv_path.name}"))
+
+        shift = timedelta(minutes=self.time_shift)
+        history = self.import_path / "esb_smart_meter_history.csv"
+        with history.open("w", newline="", encoding="utf-8") as file_obj:
+            writer = csv.writer(file_obj)
+            writer.writerow(["Read Date and End Time", "Read Value"])
+            for reading in kept:
+                raw = (reading.when - shift).strftime("%d-%m-%Y %H:%M")
+                writer.writerow([raw, f"{reading.kwh}"])
+
+        LOGGER.info(
+            "Pruned ESB readings: kept %s of %s (keep_days=%s); originals in %s",
+            len(kept),
+            len(readings),
+            keep_days,
+            backup_dir,
+        )
+        return {
+            "before": len(readings),
+            "after": len(kept),
+            "removed": len(readings) - len(kept),
+        }
 
     def _rate(self, bucket: str) -> float:
         """Return the configured rate for a bucket, falling back to 'other'."""

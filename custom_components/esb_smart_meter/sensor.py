@@ -23,6 +23,8 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN, RATE_BUCKETS
 from .coordinator import ESBSmartMeterCoordinator
 
+KWH = UnitOfEnergy.KILO_WATT_HOUR
+
 
 @dataclass(frozen=True, kw_only=True)
 class ESBSensorDescription(SensorEntityDescription):
@@ -32,7 +34,7 @@ class ESBSensorDescription(SensorEntityDescription):
 
 
 def _period_value(period: str, key: str) -> Callable[[dict[str, Any]], Any]:
-    """Return a period value getter."""
+    """Return a getter for a value inside a period dict."""
 
     def _getter(data: dict[str, Any]) -> Any:
         return _round(data.get(period, {}).get(key, 0.0))
@@ -40,7 +42,36 @@ def _period_value(period: str, key: str) -> Callable[[dict[str, Any]], Any]:
     return _getter
 
 
+def _recent_value(key: str) -> Callable[[dict[str, Any]], Any]:
+    """Return a getter for the most-recent-complete-day period."""
+    return _period_value("recent_complete", key)
+
+
+def _energy(key: str, translation_key: str, value_fn, **kw) -> ESBSensorDescription:
+    return ESBSensorDescription(
+        key=key,
+        translation_key=translation_key,
+        native_unit_of_measurement=KWH,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        value_fn=value_fn,
+        **kw,
+    )
+
+
+def _cost(key: str, translation_key: str, value_fn, **kw) -> ESBSensorDescription:
+    return ESBSensorDescription(
+        key=key,
+        translation_key=translation_key,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        value_fn=value_fn,
+        **kw,
+    )
+
+
 SENSORS: tuple[ESBSensorDescription, ...] = (
+    # --- diagnostics -------------------------------------------------------
     ESBSensorDescription(
         key="last_import",
         translation_key="last_import",
@@ -52,6 +83,14 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
         translation_key="last_reading",
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda data: _as_local_timestamp(data.get("last_reading")),
+    ),
+    ESBSensorDescription(
+        key="last_reading_age",
+        translation_key="last_reading_age",
+        native_unit_of_measurement="h",
+        icon="mdi:timer-sand",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: _round(data.get("last_reading_age_hours")),
     ),
     ESBSensorDescription(
         key="records",
@@ -70,108 +109,17 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="latest_interval_energy",
         translation_key="latest_interval_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        native_unit_of_measurement=KWH,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: _round(data.get("last_interval_kwh")),
     ),
     ESBSensorDescription(
         key="total_import",
         translation_key="total_import",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        native_unit_of_measurement=KWH,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda data: _round(data.get("total_import_kwh")),
-    ),
-    ESBSensorDescription(
-        key="today_energy",
-        translation_key="today_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("today", "total_kwh"),
-    ),
-    ESBSensorDescription(
-        key="today_cheap_energy",
-        translation_key="today_cheap_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("today", "cheap_kwh"),
-    ),
-    ESBSensorDescription(
-        key="today_night_energy",
-        translation_key="today_night_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("today", "night_kwh"),
-    ),
-    ESBSensorDescription(
-        key="today_day_energy",
-        translation_key="today_day_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("today", "day_kwh"),
-    ),
-    ESBSensorDescription(
-        key="today_peak_energy",
-        translation_key="today_peak_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("today", "peak_kwh"),
-    ),
-    ESBSensorDescription(
-        key="today_cost",
-        translation_key="today_cost",
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("today", "cost"),
-    ),
-    ESBSensorDescription(
-        key="yesterday_energy",
-        translation_key="yesterday_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("yesterday", "total_kwh"),
-    ),
-    ESBSensorDescription(
-        key="yesterday_cost",
-        translation_key="yesterday_cost",
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("yesterday", "cost"),
-    ),
-    ESBSensorDescription(
-        key="month_energy",
-        translation_key="month_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("month", "total_kwh"),
-    ),
-    ESBSensorDescription(
-        key="month_cost",
-        translation_key="month_cost",
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        value_fn=_period_value("month", "cost"),
-    ),
-    ESBSensorDescription(
-        key="projected_month_cost",
-        translation_key="projected_month_cost",
-        icon="mdi:chart-line",
-        device_class=SensorDeviceClass.MONETARY,
-        value_fn=lambda data: data.get("projected_month_cost"),
-    ),
-    ESBSensorDescription(
-        key="last_7_average_daily_cost",
-        translation_key="last_7_average_daily_cost",
-        icon="mdi:cash-clock",
-        device_class=SensorDeviceClass.MONETARY,
-        value_fn=lambda data: data.get("last_7_average_daily_cost"),
     ),
     ESBSensorDescription(
         key="current_rate_bucket",
@@ -186,16 +134,75 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("current_rate"),
     ),
+    # --- today -------------------------------------------------------------
+    _energy("today_energy", "today_energy", _period_value("today", "total_kwh")),
+    _energy("today_cheap_energy", "today_cheap_energy", _period_value("today", "cheap_kwh")),
+    _energy("today_night_energy", "today_night_energy", _period_value("today", "night_kwh")),
+    _energy("today_day_energy", "today_day_energy", _period_value("today", "day_kwh")),
+    _energy("today_peak_energy", "today_peak_energy", _period_value("today", "peak_kwh")),
+    _cost("today_cost", "today_cost", _period_value("today", "cost")),
+    # --- yesterday ---------------------------------------------------------
+    _energy("yesterday_energy", "yesterday_energy", _period_value("yesterday", "total_kwh")),
+    _cost("yesterday_cost", "yesterday_cost", _period_value("yesterday", "cost")),
+    # --- month -------------------------------------------------------------
+    _energy("month_energy", "month_energy", _period_value("month", "total_kwh")),
+    _cost("month_cost", "month_cost", _period_value("month", "cost")),
+    _cost("month_cheap_cost", "month_cheap_cost", _period_value("month", "cheap_cost")),
+    _cost("month_night_cost", "month_night_cost", _period_value("month", "night_cost")),
+    _cost("month_day_cost", "month_day_cost", _period_value("month", "day_cost")),
+    ESBSensorDescription(
+        key="month_complete_days",
+        translation_key="month_complete_days",
+        icon="mdi:calendar-check",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("month_complete_day_count", 0),
+    ),
+    ESBSensorDescription(
+        key="projected_month_cost",
+        translation_key="projected_month_cost",
+        icon="mdi:chart-line",
+        device_class=SensorDeviceClass.MONETARY,
+        value_fn=lambda data: _round(data.get("projected_month_cost")),
+    ),
+    # --- most recent complete day -----------------------------------------
+    ESBSensorDescription(
+        key="recent_complete_date",
+        translation_key="recent_complete_date",
+        icon="mdi:calendar-check",
+        value_fn=lambda data: data["recent_complete_date"].isoformat()
+        if data.get("recent_complete_date")
+        else None,
+    ),
+    _energy("recent_complete_energy", "recent_complete_energy", _recent_value("total_kwh")),
+    _cost("recent_complete_cost", "recent_complete_cost", _recent_value("cost")),
+    _energy("recent_complete_cheap_energy", "recent_complete_cheap_energy", _recent_value("cheap_kwh")),
+    _cost("recent_complete_cheap_cost", "recent_complete_cheap_cost", _recent_value("cheap_cost")),
+    _energy("recent_complete_night_energy", "recent_complete_night_energy", _recent_value("night_kwh")),
+    _cost("recent_complete_night_cost", "recent_complete_night_cost", _recent_value("night_cost")),
+    _energy("recent_complete_day_energy", "recent_complete_day_energy", _recent_value("day_kwh")),
+    _cost("recent_complete_day_cost", "recent_complete_day_cost", _recent_value("day_cost")),
+    # --- 7-day lookback ----------------------------------------------------
+    _cost("last_7_complete_day_cost", "last_7_complete_day_cost",
+          lambda data: _round(data.get("last_7_cost", 0.0))),
+    _energy("last_7_complete_day_energy", "last_7_complete_day_energy",
+            lambda data: _round(data.get("last_7_energy", 0.0))),
+    ESBSensorDescription(
+        key="average_daily_cost_7_day",
+        translation_key="average_daily_cost_7_day",
+        device_class=SensorDeviceClass.MONETARY,
+        value_fn=lambda data: _round(data.get("last_7_average_daily_cost", 0.0)),
+    ),
+    ESBSensorDescription(
+        key="average_daily_energy_7_day",
+        translation_key="average_daily_energy_7_day",
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: _round(data.get("last_7_average_daily_energy", 0.0)),
+    ),
 )
 
 # Sensors whose native unit is the configured currency.
-_MONETARY_KEYS = {
-    "today_cost",
-    "yesterday_cost",
-    "month_cost",
-    "projected_month_cost",
-    "last_7_average_daily_cost",
-}
+_MONETARY_KEYS = {d.key for d in SENSORS if d.device_class == SensorDeviceClass.MONETARY}
 
 # Diagnostic sensors that stay available even before any CSV data is found.
 _ALWAYS_AVAILABLE = {
@@ -215,14 +222,11 @@ async def async_setup_entry(
     """Set up ESB Smart Meter sensors."""
     coordinator: ESBSmartMeterCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        ESBSmartMeterSensor(coordinator, entry, description)
-        for description in SENSORS
+        ESBSmartMeterSensor(coordinator, entry, description) for description in SENSORS
     )
 
 
-class ESBSmartMeterSensor(
-    CoordinatorEntity[ESBSmartMeterCoordinator], SensorEntity
-):
+class ESBSmartMeterSensor(CoordinatorEntity[ESBSmartMeterCoordinator], SensorEntity):
     """Representation of an ESB Smart Meter sensor."""
 
     entity_description: ESBSensorDescription
@@ -278,21 +282,16 @@ class ESBSmartMeterSensor(
         if key in ("today_energy", "yesterday_energy", "month_energy"):
             period = data.get(key.split("_")[0], {})
             return {f"{b}_kwh": period.get(f"{b}_kwh") for b in RATE_BUCKETS}
-        if key in ("today_cost", "yesterday_cost", "month_cost"):
-            period = data.get(key.split("_")[0], {})
+        if key == "month_cost":
+            period = data.get("month", {})
             attrs = {f"{b}_cost": period.get(f"{b}_cost") for b in RATE_BUCKETS}
-            attrs["energy_cost"] = period.get("energy_cost")
-            attrs["standing_charge"] = period.get("standing_charge")
-            if key == "month_cost":
-                attrs["complete_days"] = data.get("month_complete_day_count")
-                attrs["projected_cost"] = data.get("projected_month_cost")
+            attrs["complete_days"] = data.get("month_complete_day_count")
+            attrs["projected_cost"] = data.get("projected_month_cost")
             return attrs
-        if key == "last_7_average_daily_cost":
-            return {
-                "days": data.get("last_7_complete_days", []),
-                "total_cost": data.get("last_7_cost"),
-                "total_energy": data.get("last_7_energy"),
-            }
+        if key == "recent_complete_date":
+            return {"breakdown": data.get("recent_complete", {})}
+        if key in ("last_7_complete_day_cost", "last_7_complete_day_energy"):
+            return {"days": data.get("last_7_complete_days", [])}
         return {}
 
 
