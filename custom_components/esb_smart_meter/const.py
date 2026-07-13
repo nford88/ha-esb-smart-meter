@@ -60,5 +60,5 @@ STAT_ENERGY_SUFFIX = "import_energy"
 STAT_COST_SUFFIX = "import_cost"
 
 SERVICE_RELOAD = "reload"
-SERVICE_DOWNLOAD = "download"
+SERVICE_DOWNLOAD = "download_latest"
 SERVICE_IMPORT_STATISTICS = "import_statistics"

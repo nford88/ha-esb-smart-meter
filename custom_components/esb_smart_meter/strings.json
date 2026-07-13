@@ -85,7 +85,7 @@
       "name": "Reload ESB smart meter data",
       "description": "Re-scan the configured ESB CSV folder and update all ESB Smart Meter sensors."
     },
-    "download": {
+    "download_latest": {
       "name": "Download from ESB Networks",
       "description": "Log in to the ESB Networks portal and download the latest interval CSV, then refresh sensors. Requires portal credentials and MPRN to be configured."
     },

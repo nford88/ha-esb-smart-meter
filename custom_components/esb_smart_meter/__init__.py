@@ -18,12 +18,15 @@ from .const import (
     CONF_CURRENCY,
     CONF_DAY_START,
     CONF_IMPORT_PATH,
+    CONF_MPRN,
     CONF_NIGHT_START,
+    CONF_PASSWORD,
     CONF_PEAK_END,
     CONF_PEAK_START,
     CONF_RATES,
     CONF_STANDING_CHARGE,
     CONF_TIME_SHIFT_MINUTES,
+    CONF_USERNAME,
     DEFAULT_CHEAP_END,
     DEFAULT_CHEAP_START,
     DEFAULT_CURRENCY,
@@ -77,6 +80,9 @@ CONFIG_SCHEMA = vol.Schema(
                     CONF_STANDING_CHARGE, default=DEFAULT_STANDING_CHARGE
                 ): vol.Coerce(float),
                 vol.Optional(CONF_RATES, default=DEFAULT_RATES): RATE_SCHEMA,
+                vol.Optional(CONF_USERNAME): cv.string,
+                vol.Optional(CONF_PASSWORD): cv.string,
+                vol.Optional(CONF_MPRN): cv.string,
             }
         )
     },

@@ -164,7 +164,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
         translation_key="projected_month_cost",
         icon="mdi:chart-line",
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("projected_month_cost"),
     ),
     ESBSensorDescription(
@@ -172,7 +171,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
         translation_key="last_7_average_daily_cost",
         icon="mdi:cash-clock",
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("last_7_average_daily_cost"),
     ),
     ESBSensorDescription(

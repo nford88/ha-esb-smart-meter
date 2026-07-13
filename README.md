@@ -36,7 +36,7 @@ have the interval CSV files this integration reads.
   7-day average daily cost.
 - Exposes the current rate bucket and current rate as sensors.
 - **Optional ESB Networks portal download** — enter your account details and
-  Home Assistant can fetch the CSV for you (`esb_smart_meter.download`).
+  Home Assistant can fetch the CSV for you (`esb_smart_meter.download_latest`).
 - **Energy dashboard backfill** — import your full CSV history into long-term
   statistics (`esb_smart_meter.import_statistics`).
 - Options flow: change paths, tariff bands, and rates any time without
@@ -210,13 +210,13 @@ diagnostic sensors remain available even when no CSV data has been found.
 | Service                             | What it does                                             |
 | ----------------------------------- | -------------------------------------------------------- |
 | `esb_smart_meter.reload`            | Re-scan the CSV folder and refresh all sensors.          |
-| `esb_smart_meter.download`          | Log in to ESB Networks and download the latest CSV.      |
+| `esb_smart_meter.download_latest`          | Log in to ESB Networks and download the latest CSV.      |
 | `esb_smart_meter.import_statistics` | Backfill CSV history into the Energy dashboard.          |
 
 ## Automatic download (optional)
 
 If you provide your ESB portal email, password, and MPRN during setup, the
-`esb_smart_meter.download` service will log in to
+`esb_smart_meter.download_latest` service will log in to
 [myaccount.esbnetworks.ie](https://myaccount.esbnetworks.ie) and save the latest
 interval CSV into your import folder, then refresh the sensors.
 
@@ -231,7 +231,7 @@ automation:
       - trigger: time
         at: "06:30:00"
     actions:
-      - action: esb_smart_meter.download
+      - action: esb_smart_meter.download_latest
 ```
 
 ## Energy dashboard history
