@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -19,7 +20,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, RATE_BUCKETS
 from .coordinator import ESBSmartMeterCoordinator
 
 
@@ -124,7 +125,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="today_cost",
         translation_key="today_cost",
-        native_unit_of_measurement="EUR",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         value_fn=_period_value("today", "cost"),
@@ -140,7 +140,6 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="yesterday_cost",
         translation_key="yesterday_cost",
-        native_unit_of_measurement="EUR",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         value_fn=_period_value("yesterday", "cost"),
@@ -156,10 +155,25 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="month_cost",
         translation_key="month_cost",
-        native_unit_of_measurement="EUR",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         value_fn=_period_value("month", "cost"),
+    ),
+    ESBSensorDescription(
+        key="projected_month_cost",
+        translation_key="projected_month_cost",
+        icon="mdi:chart-line",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("projected_month_cost"),
+    ),
+    ESBSensorDescription(
+        key="last_7_average_daily_cost",
+        translation_key="last_7_average_daily_cost",
+        icon="mdi:cash-clock",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("last_7_average_daily_cost"),
     ),
     ESBSensorDescription(
         key="current_rate_bucket",
@@ -170,12 +184,29 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     ESBSensorDescription(
         key="current_rate",
         translation_key="current_rate",
-        native_unit_of_measurement="EUR/kWh",
         icon="mdi:cash",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("current_rate"),
     ),
 )
+
+# Sensors whose native unit is the configured currency.
+_MONETARY_KEYS = {
+    "today_cost",
+    "yesterday_cost",
+    "month_cost",
+    "projected_month_cost",
+    "last_7_average_daily_cost",
+}
+
+# Diagnostic sensors that stay available even before any CSV data is found.
+_ALWAYS_AVAILABLE = {
+    "last_import",
+    "records",
+    "coverage_days",
+    "current_rate_bucket",
+    "current_rate",
+}
 
 
 async def async_setup_entry(
@@ -209,6 +240,10 @@ class ESBSmartMeterSensor(
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        if description.key in _MONETARY_KEYS:
+            self._attr_native_unit_of_measurement = coordinator.currency
+        elif description.key == "current_rate":
+            self._attr_native_unit_of_measurement = f"{coordinator.currency}/kWh"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": entry.data.get(CONF_NAME, "ESB Smart Meter"),
@@ -219,13 +254,7 @@ class ESBSmartMeterSensor(
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        if self.entity_description.key in {
-            "last_import",
-            "records",
-            "coverage_days",
-            "current_rate_bucket",
-            "current_rate",
-        }:
+        if self.entity_description.key in _ALWAYS_AVAILABLE:
             return True
         return bool(self.coordinator.data and self.coordinator.data.get("available"))
 
@@ -237,22 +266,43 @@ class ESBSmartMeterSensor(
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra attributes for diagnostics."""
+        """Return per-bucket / diagnostic breakdowns for relevant sensors."""
         data = self.coordinator.data or {}
-        if self.entity_description.key != "records":
-            return {}
-        return {
-            "import_path": str(self.coordinator.import_path),
-            "files": data.get("files", []),
-            "message": data.get("message"),
-        }
+        key = self.entity_description.key
+
+        if key == "records":
+            return {
+                "import_path": str(self.coordinator.import_path),
+                "files": data.get("files", []),
+                "message": data.get("message"),
+                "last_reading_age_hours": data.get("last_reading_age_hours"),
+            }
+        if key in ("today_energy", "yesterday_energy", "month_energy"):
+            period = data.get(key.split("_")[0], {})
+            return {f"{b}_kwh": period.get(f"{b}_kwh") for b in RATE_BUCKETS}
+        if key in ("today_cost", "yesterday_cost", "month_cost"):
+            period = data.get(key.split("_")[0], {})
+            attrs = {f"{b}_cost": period.get(f"{b}_cost") for b in RATE_BUCKETS}
+            attrs["energy_cost"] = period.get("energy_cost")
+            attrs["standing_charge"] = period.get("standing_charge")
+            if key == "month_cost":
+                attrs["complete_days"] = data.get("month_complete_day_count")
+                attrs["projected_cost"] = data.get("projected_month_cost")
+            return attrs
+        if key == "last_7_average_daily_cost":
+            return {
+                "days": data.get("last_7_complete_days", []),
+                "total_cost": data.get("last_7_cost"),
+                "total_energy": data.get("last_7_energy"),
+            }
+        return {}
 
 
 def _round(value: Any) -> Any:
     """Round numeric sensor values."""
     if value is None:
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return round(value, 3)
     return value
 

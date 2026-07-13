@@ -28,11 +28,42 @@ have the interval CSV files this integration reads.
 - Imports ESB interval CSV files from a configured Home Assistant folder.
 - Tracks total imported kWh, today's usage, yesterday's usage, monthly usage,
   and the latest interval reading.
-- Estimates energy cost using configurable `cheap`, `night`, `day`, `peak`,
-  and `other` rates.
+- Estimates energy cost using configurable `cheap`, `night`, `day`, and `peak`
+  rates, a configurable currency, and an optional daily standing charge.
+- **Fully configurable tariff bands** — the cheap/boost, night, day, and peak
+  window times are all set to match *your* supplier plan (see below).
+- Per-bucket energy and cost breakdowns, a projected month-end cost, and a
+  7-day average daily cost.
 - Exposes the current rate bucket and current rate as sensors.
-- Adds a `esb_smart_meter.reload` service to rescan CSV files on demand.
+- **Optional ESB Networks portal download** — enter your account details and
+  Home Assistant can fetch the CSV for you (`esb_smart_meter.download`).
+- **Energy dashboard backfill** — import your full CSV history into long-term
+  statistics (`esb_smart_meter.import_statistics`).
+- Options flow: change paths, tariff bands, and rates any time without
+  removing the integration.
+- Diagnostics download and a repair issue when no data is found.
 - Deduplicates readings by timestamp when multiple CSV files overlap.
+
+## Tariff bands
+
+Electricity plans differ by supplier, so the band **times** and **rates** are
+yours to set — during onboarding or later via the integration's options. The
+ESB HDF export contains only your half-hourly usage, **not** any pricing or
+plan information, so the bands cannot be detected from the data.
+
+The defaults follow the common Irish smart tariff and are contiguous, so every
+half-hour falls into exactly one band and `cheap + night + day + peak` always
+sums to the total:
+
+| Band  | Default window            | Notes                              |
+| ----- | ------------------------- | ---------------------------------- |
+| cheap | 02:00–04:00               | Boost/EV window; highest priority  |
+| peak  | 17:00–19:00               |                                    |
+| night | 23:00–08:00 (wraps)       | Everything from night start to day |
+| day   | 08:00–17:00 & 19:00–23:00 | Everything else                    |
+
+Adjust `cheap_start`/`cheap_end`, `night_start`, `day_start`, `peak_start`, and
+`peak_end` to match your plan.
 
 ## HACS Installation
 
@@ -93,9 +124,12 @@ config/
       config_flow.py
       const.py
       coordinator.py
+      diagnostics.py
+      downloader.py
       manifest.json
       sensor.py
       services.yaml
+      statistics.py
       strings.json
       translations/
         en.json
@@ -111,8 +145,14 @@ esb_smart_meter:
   name: ESB Smart Meter
   import_path: /config/esb_energy
   time_shift_minutes: -30
+  currency: EUR
+  standing_charge: 0.0        # daily fixed charge, in your currency
   cheap_start: "02:00"
   cheap_end: "04:00"
+  night_start: "23:00"
+  day_start: "08:00"
+  peak_start: "17:00"
+  peak_end: "19:00"
   rates:
     cheap: 0.08
     night: 0.18
@@ -120,6 +160,9 @@ esb_smart_meter:
     peak: 0.36
     other: 0.34
 ```
+
+The UI flow additionally accepts optional ESB portal `username`, `password`,
+and `mprn` for the download feature.
 
 If you use YAML, restart Home Assistant after editing `configuration.yaml`.
 
@@ -155,8 +198,50 @@ The integration creates sensors for:
 - Per-rate totals for current-day usage.
 - Current rate bucket and current rate.
 
+Per-bucket energy and cost breakdowns are exposed as attributes on the
+`today`/`yesterday`/`month` energy and cost sensors. A projected month-end cost
+and a 7-day average daily cost are also provided.
+
 Sensor availability depends on whether valid CSV rows have been imported. Basic
 diagnostic sensors remain available even when no CSV data has been found.
+
+## Services
+
+| Service                             | What it does                                             |
+| ----------------------------------- | -------------------------------------------------------- |
+| `esb_smart_meter.reload`            | Re-scan the CSV folder and refresh all sensors.          |
+| `esb_smart_meter.download`          | Log in to ESB Networks and download the latest CSV.      |
+| `esb_smart_meter.import_statistics` | Backfill CSV history into the Energy dashboard.          |
+
+## Automatic download (optional)
+
+If you provide your ESB portal email, password, and MPRN during setup, the
+`esb_smart_meter.download` service will log in to
+[myaccount.esbnetworks.ie](https://myaccount.esbnetworks.ie) and save the latest
+interval CSV into your import folder, then refresh the sensors.
+
+> **ESB rate-limits logins heavily** (roughly one or two attempts per day).
+> The download is therefore never run automatically on the polling interval —
+> trigger it yourself, for example with a once-daily automation:
+
+```yaml
+automation:
+  - alias: Daily ESB download
+    triggers:
+      - trigger: time
+        at: "06:30:00"
+    actions:
+      - action: esb_smart_meter.download
+```
+
+## Energy dashboard history
+
+The regular sensors only accrue from the moment you install the integration.
+To see your full history on the Energy dashboard, call
+`esb_smart_meter.import_statistics` once after importing CSVs. It pushes your
+whole CSV history into Home Assistant long-term statistics as external
+statistics (`esb_smart_meter:import_energy` and `esb_smart_meter:import_cost`).
+Running it again is safe — existing points are updated in place.
 
 ## Privacy
 

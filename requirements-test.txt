@@ -1,0 +1,5 @@
+# Test dependencies. pytest-homeassistant-custom-component pulls in a matching
+# Home Assistant + pytest stack; it is intentionally unpinned so CI always runs
+# against the current Home Assistant release.
+pytest-homeassistant-custom-component
+beautifulsoup4==4.12.3

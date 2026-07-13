@@ -1,3 +1,18 @@
 reload:
   name: Reload ESB smart meter data
   description: Re-scan the configured ESB CSV folder and update all ESB Smart Meter sensors.
+
+download:
+  name: Download from ESB Networks
+  description: >-
+    Log in to the ESB Networks portal and download the latest interval CSV into
+    the configured import folder, then refresh sensors. Requires username,
+    password and MPRN to be configured. ESB rate-limits logins, so call this at
+    most once or twice per day.
+
+import_statistics:
+  name: Import history into statistics
+  description: >-
+    Backfill all available CSV history into Home Assistant long-term statistics
+    so past usage and cost appear on the Energy dashboard. Safe to run again;
+    existing points are updated in place.

@@ -6,13 +6,47 @@
     "step": {
       "user": {
         "title": "ESB Smart Meter",
-        "description": "Configure ESB Networks CSV import settings.",
+        "description": "Configure ESB Networks CSV import settings. Set the tariff band times and rates to match YOUR supplier plan — the ESB export contains only usage, not pricing, so these cannot be detected automatically. The ESB portal username, password and MPRN are optional; fill them in only if you want Home Assistant to download the CSV for you.",
         "data": {
           "name": "Name",
           "import_path": "CSV import path",
           "time_shift_minutes": "Time shift in minutes",
-          "cheap_start": "Cheap rate start time",
-          "cheap_end": "Cheap rate end time",
+          "cheap_start": "Cheap/boost rate start time",
+          "cheap_end": "Cheap/boost rate end time",
+          "night_start": "Night rate start time",
+          "day_start": "Day rate start time",
+          "peak_start": "Peak rate start time",
+          "peak_end": "Peak rate end time",
+          "currency": "Currency",
+          "standing_charge": "Daily standing charge",
+          "cheap_rate": "Cheap rate",
+          "night_rate": "Night rate",
+          "day_rate": "Day rate",
+          "peak_rate": "Peak rate",
+          "other_rate": "Other rate",
+          "username": "ESB portal email (optional)",
+          "password": "ESB portal password (optional)",
+          "mprn": "MPRN (optional)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ESB Smart Meter options",
+        "description": "Update import and tariff settings. Changes apply after a short reload.",
+        "data": {
+          "import_path": "CSV import path",
+          "time_shift_minutes": "Time shift in minutes",
+          "cheap_start": "Cheap/boost rate start time",
+          "cheap_end": "Cheap/boost rate end time",
+          "night_start": "Night rate start time",
+          "day_start": "Day rate start time",
+          "peak_start": "Peak rate start time",
+          "peak_end": "Peak rate end time",
+          "currency": "Currency",
+          "standing_charge": "Daily standing charge",
           "cheap_rate": "Cheap rate",
           "night_rate": "Night rate",
           "day_rate": "Day rate",
@@ -24,66 +58,46 @@
   },
   "entity": {
     "sensor": {
-      "last_import": {
-        "name": "Last import"
-      },
-      "last_reading": {
-        "name": "Last reading"
-      },
-      "records": {
-        "name": "Records"
-      },
-      "coverage_days": {
-        "name": "Coverage days"
-      },
-      "latest_interval_energy": {
-        "name": "Latest interval energy"
-      },
-      "total_import": {
-        "name": "Total import"
-      },
-      "today_energy": {
-        "name": "Today energy"
-      },
-      "today_cheap_energy": {
-        "name": "Today cheap energy"
-      },
-      "today_night_energy": {
-        "name": "Today night energy"
-      },
-      "today_day_energy": {
-        "name": "Today day energy"
-      },
-      "today_peak_energy": {
-        "name": "Today peak energy"
-      },
-      "today_cost": {
-        "name": "Today cost"
-      },
-      "yesterday_energy": {
-        "name": "Yesterday energy"
-      },
-      "yesterday_cost": {
-        "name": "Yesterday cost"
-      },
-      "month_energy": {
-        "name": "Month energy"
-      },
-      "month_cost": {
-        "name": "Month cost"
-      },
-      "current_rate_bucket": {
-        "name": "Current rate bucket"
-      },
-      "current_rate": {
-        "name": "Current rate"
-      }
+      "last_import": { "name": "Last import" },
+      "last_reading": { "name": "Last reading" },
+      "records": { "name": "Records" },
+      "coverage_days": { "name": "Coverage days" },
+      "latest_interval_energy": { "name": "Latest interval energy" },
+      "total_import": { "name": "Total import" },
+      "today_energy": { "name": "Today energy" },
+      "today_cheap_energy": { "name": "Today cheap energy" },
+      "today_night_energy": { "name": "Today night energy" },
+      "today_day_energy": { "name": "Today day energy" },
+      "today_peak_energy": { "name": "Today peak energy" },
+      "today_cost": { "name": "Today cost" },
+      "yesterday_energy": { "name": "Yesterday energy" },
+      "yesterday_cost": { "name": "Yesterday cost" },
+      "month_energy": { "name": "Month energy" },
+      "month_cost": { "name": "Month cost" },
+      "projected_month_cost": { "name": "Projected month cost" },
+      "last_7_average_daily_cost": { "name": "7-day average daily cost" },
+      "current_rate_bucket": { "name": "Current rate bucket" },
+      "current_rate": { "name": "Current rate" }
     }
   },
   "services": {
     "reload": {
       "name": "Reload ESB smart meter data",
       "description": "Re-scan the configured ESB CSV folder and update all ESB Smart Meter sensors."
+    },
+    "download": {
+      "name": "Download from ESB Networks",
+      "description": "Log in to the ESB Networks portal and download the latest interval CSV, then refresh sensors. Requires portal credentials and MPRN to be configured."
+    },
+    "import_statistics": {
+      "name": "Import history into statistics",
+      "description": "Backfill available CSV history into long-term statistics so past usage and cost appear on the Energy dashboard."
+    }
+  },
+  "issues": {
+    "no_csv_data": {
+      "title": "No ESB smart meter data found",
+      "description": "No valid interval rows were found in `{path}`. Add ESB CSV exports to that folder (or configure portal download), then call the `esb_smart_meter.reload` service."
     }
   }
 }

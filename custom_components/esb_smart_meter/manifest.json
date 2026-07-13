@@ -1,12 +1,13 @@
 {
   "domain": "esb_smart_meter",
   "name": "ESB Smart Meter",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@gerbear1990"],
   "config_flow": true,
   "documentation": "https://github.com/gerbear1990/ha-esb-smart-meter",
   "integration_type": "service",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/gerbear1990/ha-esb-smart-meter/issues",
-  "requirements": [],
-  "version": "0.2.0"
+  "requirements": ["beautifulsoup4==4.12.3"],
+  "version": "0.3.0"
 }
