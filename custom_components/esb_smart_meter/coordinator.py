@@ -50,6 +50,10 @@ from .const import (
     DEFAULT_STANDING_CHARGE,
     DEFAULT_TIME_SHIFT_MINUTES,
     DEFAULT_VAT_PERCENT,
+    DOWNLOAD_STATUS_CAPTCHA,
+    DOWNLOAD_STATUS_FAILED,
+    DOWNLOAD_STATUS_NEVER,
+    DOWNLOAD_STATUS_OK,
     ENERGY_HEADER_MARKER,
     EXPORT_KEYWORD,
     INTERVAL_HOURS,
@@ -94,6 +98,12 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self._total_high_water = 0.0
         self._export_high_water = 0.0
+        # Last automatic/manual portal-download outcome, surfaced via a sensor.
+        self.last_download_status = DOWNLOAD_STATUS_NEVER
+        self.last_download_error: str | None = None
+        self.last_download_time: datetime | None = None
+        self.last_download_rows: int | None = None
+        self.next_download_time: datetime | None = None
         self._reload_settings()
         super().__init__(
             hass,
@@ -184,18 +194,63 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             and self.entry.data.get(CONF_MPRN)
         )
 
-    async def async_download_latest(self) -> None:
-        """Download the latest ESB CSV, then refresh sensors.
+    async def async_download_latest(self, *, raise_on_error: bool = True) -> bool:
+        """Download the latest ESB CSV, record the outcome, then refresh sensors.
 
-        This is intentionally only wired to an explicit service call: ESB
-        rate-limits logins heavily (roughly a couple of attempts per day), so
-        it must not run on the regular polling interval.
+        Returns True on success. The recorded status/error is exposed through the
+        download-status sensor. The scheduler calls this with
+        ``raise_on_error=False`` (it handles its own retry/back-off); the manual
+        service keeps raising so the user sees the failure in the UI.
+
+        ESB rate-limits logins heavily, so callers must not invoke this more than
+        roughly once or twice per day.
         """
-        await self.hass.async_add_executor_job(self._download_latest)
-        await self.async_request_refresh()
+        # Imported lazily so the optional beautifulsoup4/requests dependency is
+        # only touched when the user actually uses the portal download.
+        from .downloader import ESBCaptchaError, ESBDownloadError
 
-    def _download_latest(self) -> None:
-        """Download the latest ESB CSV into the import folder (executor)."""
+        try:
+            rows = await self.hass.async_add_executor_job(self._download_latest)
+        except ESBCaptchaError as err:
+            self._record_download(DOWNLOAD_STATUS_CAPTCHA, str(err))
+            success = False
+            if raise_on_error:
+                await self.async_request_refresh()
+                raise
+        except ESBDownloadError as err:
+            self._record_download(DOWNLOAD_STATUS_FAILED, str(err))
+            success = False
+            if raise_on_error:
+                await self.async_request_refresh()
+                raise
+        except Exception as err:  # noqa: BLE001 - record then surface/soften
+            self._record_download(DOWNLOAD_STATUS_FAILED, str(err))
+            success = False
+            if raise_on_error:
+                await self.async_request_refresh()
+                raise
+        else:
+            self._record_download(DOWNLOAD_STATUS_OK, None, rows=rows)
+            success = True
+
+        await self.async_request_refresh()
+        return success
+
+    def _record_download(
+        self, status: str, error: str | None, *, rows: int | None = None
+    ) -> None:
+        """Store the outcome of a download attempt for the status sensor."""
+        self.last_download_status = status
+        self.last_download_error = error
+        self.last_download_time = dt_util.now()
+        if rows is not None:
+            self.last_download_rows = rows
+
+    def _download_latest(self) -> int:
+        """Download the latest ESB CSV into the import folder (executor).
+
+        Returns the row count downloaded.
+        """
         # Imported lazily so the optional beautifulsoup4/requests dependency is
         # only touched when the user actually uses the portal download.
         from .downloader import ESBDownloadError, download_latest_csv
@@ -218,6 +273,7 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             result.rows,
             result.filename,
         )
+        return result.rows
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch and process CSV data."""
@@ -244,6 +300,7 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "current_rate": self._rate(current_bucket),
                 "message": f"No ESB CSV rows found in {self.import_path}",
                 **export_block,
+                **self._download_status_block(),
             }
 
         readings = import_readings
@@ -397,6 +454,7 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "discount_percent": self.discount_percent,
             "message": "OK",
             **export_block,
+            **self._download_status_block(),
         }
 
     def costed_readings(self) -> list[tuple[datetime, float, float]]:
@@ -492,6 +550,16 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "before": len(readings),
             "after": len(kept),
             "removed": len(readings) - len(kept),
+        }
+
+    def _download_status_block(self) -> dict[str, Any]:
+        """Expose the last portal-download outcome to the sensor layer."""
+        return {
+            "download_status": self.last_download_status,
+            "download_error": self.last_download_error,
+            "download_time": self.last_download_time,
+            "download_rows": self.last_download_rows,
+            "next_download": self.next_download_time,
         }
 
     def _rate(self, bucket: str) -> float:

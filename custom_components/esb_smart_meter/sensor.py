@@ -122,6 +122,12 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
         value_fn=lambda data: _round(data.get("total_import_kwh")),
     ),
     ESBSensorDescription(
+        key="download_status",
+        translation_key="download_status",
+        icon="mdi:cloud-download",
+        value_fn=lambda data: data.get("download_status"),
+    ),
+    ESBSensorDescription(
         key="current_rate_bucket",
         translation_key="current_rate_bucket",
         icon="mdi:clock-outline",
@@ -253,6 +259,7 @@ _ALWAYS_AVAILABLE = {
     "coverage_days",
     "current_rate_bucket",
     "current_rate",
+    "download_status",
 }
 
 
@@ -325,6 +332,15 @@ class ESBSmartMeterSensor(CoordinatorEntity[ESBSmartMeterCoordinator], SensorEnt
                 "files": data.get("files", []),
                 "message": data.get("message"),
                 "last_reading_age_hours": data.get("last_reading_age_hours"),
+            }
+        if key == "download_status":
+            # Surfaces WHY an automatic download did not run, so a failure is
+            # visible in the UI rather than only in the logs.
+            return {
+                "reason": data.get("download_error"),
+                "last_attempt": data.get("download_time"),
+                "last_rows": data.get("download_rows"),
+                "next_scheduled": data.get("next_download"),
             }
         if key in ("today_energy", "yesterday_energy", "month_energy"):
             period = data.get(key.split("_")[0], {})

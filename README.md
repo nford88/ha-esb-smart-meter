@@ -381,9 +381,36 @@ If you provide your ESB portal email, password, and MPRN during setup, the
 [myaccount.esbnetworks.ie](https://myaccount.esbnetworks.ie) and save the latest
 interval CSV into your import folder, then refresh the sensors.
 
-> **ESB rate-limits logins heavily** (roughly one or two attempts per day).
-> The download is therefore never run automatically on the polling interval —
-> trigger it yourself, for example with a once-daily automation:
+> **ESB rate-limits logins heavily** (roughly one or two attempts per day) and
+> applies bot detection, so downloads must stay infrequent.
+
+### Built-in schedule
+
+Rather than writing your own automation, set a schedule in the integration
+**options** (**Settings → Devices & services → ESB Smart Meter → Configure**).
+Every download is a fresh login against ESB's bot-detecting sign-in, so the
+schedule is your entire exposure — pick one of:
+
+| Mode | Behaviour |
+| --- | --- |
+| **Manual** (default) | Never downloads automatically; call `esb_smart_meter.download_latest` yourself. |
+| **Daily window** | One download per day at a **random time inside a window** (default 09:00–12:00), re-randomised each day so it never looks like clockwork. One retry a few hours later on failure. |
+| **Interval** | A download every *N* minutes after the previous one, with ±10% jitter. Minimum 30 minutes. |
+
+A random daily window at normal human hours is the recommended setting: a
+download at the exact same second every day is itself a bot signature, and ESB's
+data only refreshes about once a day (and lags ~3 days) so more frequent
+downloads gain nothing.
+
+### Seeing why a download failed
+
+The **Download status** sensor shows the outcome of the last automatic (or
+manual) download — `OK`, `Failed`, `Blocked (captcha)`, or `Not run yet` — with
+the exact failure reason, timestamp, and next scheduled run in its attributes.
+A captcha block means your account/IP is temporarily flagged; it clears after a
+few hours with no further login attempts.
+
+You can still drive the download from your own automation instead:
 
 ```yaml
 automation:
@@ -394,10 +421,6 @@ automation:
     actions:
       - action: esb_smart_meter.download_latest
 ```
-
-ESB also applies human verification, so this can fail even with correct
-credentials. Watch the **Last reading age** sensor to catch a download that has
-quietly stopped working.
 
 ## Housekeeping (prune)
 

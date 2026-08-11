@@ -15,8 +15,10 @@ from .const import (
     CONF_CURRENCY,
     CONF_DAY_START,
     CONF_DISCOUNT_PERCENT,
+    CONF_DOWNLOAD_MODE,
     CONF_EXPORT_RATE,
     CONF_IMPORT_PATH,
+    CONF_INTERVAL_MINUTES,
     CONF_MPRN,
     CONF_NIGHT_START,
     CONF_PASSWORD,
@@ -27,13 +29,17 @@ from .const import (
     CONF_TIME_SHIFT_MINUTES,
     CONF_USERNAME,
     CONF_VAT_PERCENT,
+    CONF_WINDOW_END_HOUR,
+    CONF_WINDOW_START_HOUR,
     DEFAULT_CHEAP_END,
     DEFAULT_CHEAP_START,
     DEFAULT_CURRENCY,
     DEFAULT_DAY_START,
     DEFAULT_DISCOUNT_PERCENT,
+    DEFAULT_DOWNLOAD_MODE,
     DEFAULT_EXPORT_RATE,
     DEFAULT_IMPORT_PATH,
+    DEFAULT_INTERVAL_MINUTES,
     DEFAULT_NIGHT_START,
     DEFAULT_PEAK_END,
     DEFAULT_PEAK_START,
@@ -41,7 +47,13 @@ from .const import (
     DEFAULT_STANDING_CHARGE,
     DEFAULT_TIME_SHIFT_MINUTES,
     DEFAULT_VAT_PERCENT,
+    DEFAULT_WINDOW_END_HOUR,
+    DEFAULT_WINDOW_START_HOUR,
     DOMAIN,
+    DOWNLOAD_MODE_DAILY_WINDOW,
+    DOWNLOAD_MODE_INTERVAL,
+    DOWNLOAD_MODE_MANUAL,
+    MIN_INTERVAL_MINUTES,
 )
 
 _RATE_FIELDS = ("cheap_rate", "night_rate", "day_rate", "peak_rate", "other_rate")
@@ -222,5 +234,33 @@ def _options_schema(entry: config_entries.ConfigEntry) -> vol.Schema:
             vol.Required("day_rate", default=rates["day"]): vol.Coerce(float),
             vol.Required("peak_rate", default=rates["peak"]): vol.Coerce(float),
             vol.Required("other_rate", default=rates["other"]): vol.Coerce(float),
+            # Automatic portal-download schedule. Window/interval fields are
+            # ignored unless the matching mode is selected.
+            vol.Required(
+                CONF_DOWNLOAD_MODE,
+                default=_current(entry, CONF_DOWNLOAD_MODE, DEFAULT_DOWNLOAD_MODE),
+            ): vol.In(
+                [
+                    DOWNLOAD_MODE_MANUAL,
+                    DOWNLOAD_MODE_DAILY_WINDOW,
+                    DOWNLOAD_MODE_INTERVAL,
+                ]
+            ),
+            vol.Required(
+                CONF_WINDOW_START_HOUR,
+                default=_current(
+                    entry, CONF_WINDOW_START_HOUR, DEFAULT_WINDOW_START_HOUR
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=0, max=23)),
+            vol.Required(
+                CONF_WINDOW_END_HOUR,
+                default=_current(entry, CONF_WINDOW_END_HOUR, DEFAULT_WINDOW_END_HOUR),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=24)),
+            vol.Required(
+                CONF_INTERVAL_MINUTES,
+                default=_current(
+                    entry, CONF_INTERVAL_MINUTES, DEFAULT_INTERVAL_MINUTES
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_INTERVAL_MINUTES)),
         }
     )

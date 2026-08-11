@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import re
 from dataclasses import dataclass
 from time import sleep
@@ -16,11 +17,25 @@ from time import sleep
 import requests
 from bs4 import BeautifulSoup
 
+# A Firefox UA is deliberate: requests cannot emit the `sec-ch-ua` client hints
+# that a real Chrome sends, and a Chrome UA without them is *less* self-consistent
+# to Azure B2C's bot detection than a Firefox UA, which never sends them.
 USER_AGENT = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0"
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ESBDownloadError(RuntimeError):
     """Raised when the ESB portal download flow fails."""
+
+
+class ESBCaptchaError(ESBDownloadError):
+    """Raised when ESB's B2C flow answers with a captcha challenge.
+
+    This means the account/IP is currently flagged by bot detection; it
+    typically clears after several hours with no further login attempts, so the
+    caller should back off rather than retry immediately.
+    """
 
 
 @dataclass(frozen=True)
@@ -30,6 +45,57 @@ class ESBDownloadResult:
     csv_text: str
     filename: str | None
     rows: int
+
+
+def _raise_for_confirmed_failure(html: str) -> None:
+    """Raise a specific error naming why the confirmed step returned no auth form.
+
+    The rendered page carries its own SETTINGS var; its `remoteResource` names
+    which B2C page was actually served (captcha, error, login re-render), which
+    turns an opaque "login failed" into an actionable reason for the user.
+    """
+    api = page_mode = None
+    remote_resource = ""
+    settings_match = re.findall(r"(?<=var SETTINGS = )\S*;", html)
+    if settings_match:
+        try:
+            failed = json.loads(settings_match[0][:-1])
+            api = failed.get("api")
+            page_mode = failed.get("pageMode")
+            remote_resource = failed.get("remoteResource") or ""
+        except ValueError:
+            pass
+    LOGGER.debug("ESB confirmed-step returned no auth form; body: %s", html[:2000])
+    if "captcha" in remote_resource.lower():
+        raise ESBCaptchaError(
+            "ESB login was blocked by a captcha challenge. The account or IP is "
+            "currently flagged by bot detection; this usually clears after a few "
+            "hours with no further login attempts."
+        )
+    raise ESBDownloadError(
+        "ESB did not complete login (no auth form at the confirmed step; "
+        f"rendered page api={api!r} pageMode={page_mode!r}). Human verification "
+        "or a login rate limit may be active."
+    )
+
+
+def _logout(session: requests.Session) -> None:
+    """Best-effort sign-out so repeated fetches don't pile up server-side sessions.
+
+    /MicrosoftIdentity/Account/SignOut is the portal's Microsoft.Identity.Web
+    sign-out route (302 -> B2C /oauth2/v2.0/logout); verified against a real
+    browser logout capture. Never allowed to fail the download — the CSV is
+    already in hand by the time this runs.
+    """
+    try:
+        session.get(
+            "https://myaccount.esbnetworks.ie/MicrosoftIdentity/Account/SignOut",
+            headers={"User-Agent": USER_AGENT},
+            allow_redirects=True,
+            timeout=(10, 10),
+        )
+    except requests.RequestException as err:
+        LOGGER.debug("ESB sign-out failed (non-fatal): %s", err)
 
 
 def download_latest_csv(username: str, password: str, mprn: str) -> ESBDownloadResult:
@@ -48,6 +114,9 @@ def download_latest_csv(username: str, password: str, mprn: str) -> ESBDownloadR
             raise ESBDownloadError("ESB login page did not contain expected settings.")
         settings = json.loads(settings_match[0][:-1])
         cookies_1 = session.cookies.get_dict()
+        # A real browser sends the B2C authorize-page URL as the Referer on the
+        # login XHR and the confirmed navigation.
+        authorize_url = response_1.url
 
         sleep(10)
         response_2 = session.post(
@@ -89,16 +158,32 @@ def download_latest_csv(username: str, password: str, mprn: str) -> ESBDownloadR
             "https://login.esbnetworks.ie/esbntwkscustportalprdb2c01.onmicrosoft.com/"
             "B2C_1A_signup_signin/api/CombinedSigninAndSignup/confirmed",
             params={
-                "rememberMe": False,
+                # Must be the literal lowercase string "false": a real browser
+                # sends it lowercase, and Python's False serialises to "False",
+                # which the current B2C flow rejects (it re-renders the page
+                # shell instead of returning the token-handoff form).
+                "rememberMe": "false",
                 "csrf_token": settings["csrf"],
                 "tx": settings["transId"],
                 "p": "B2C_1A_signup_signin",
+                # Client-side diagnostics blob a real browser always appends;
+                # B2C uses its presence as a bot signal. pageViewId comes from
+                # the same SETTINGS object parsed above.
+                "diags": json.dumps(
+                    {
+                        "pageViewId": settings.get("pageViewId", ""),
+                        "pageId": "CombinedSigninAndSignup",
+                        "trace": [],
+                    },
+                    separators=(",", ":"),
+                ),
             },
             headers={
                 "User-Agent": USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
+                "Referer": authorize_url,
                 "Dnt": "1",
                 "Sec-Gpc": "1",
                 "Sec-Fetch-Dest": "document",
@@ -114,15 +199,11 @@ def download_latest_csv(username: str, password: str, mprn: str) -> ESBDownloadR
             timeout=(10, 10),
         )
         response_3.raise_for_status()
-        if response_3.text[0:21] != "<!DOCTYPE html PUBLIC":
-            raise ESBDownloadError(
-                "ESB did not complete login. Human verification or login limit may be active."
-            )
 
         soup = BeautifulSoup(response_3.content, "html.parser")
         form = soup.find("form", {"id": "auto"})
         if form is None:
-            raise ESBDownloadError("ESB login response did not include the expected auto form.")
+            _raise_for_confirmed_failure(response_3.text)
 
         sleep(2)
         response_4 = session.post(
@@ -233,6 +314,7 @@ def download_latest_csv(username: str, password: str, mprn: str) -> ESBDownloadR
             parts = disposition.split(";")
             if len(parts) > 1 and "=" in parts[1]:
                 filename = parts[1].split("=", 1)[1].strip().strip('"')
+        _logout(session)
         return ESBDownloadResult(csv_text=csv_text, filename=filename, rows=rows)
     except requests.RequestException as err:
         raise ESBDownloadError(f"ESB request failed: {err}") from err
