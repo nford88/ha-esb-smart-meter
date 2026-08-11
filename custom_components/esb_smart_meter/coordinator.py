@@ -46,7 +46,9 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_STANDING_CHARGE,
     DEFAULT_TIME_SHIFT_MINUTES,
+    ENERGY_HEADER_MARKER,
     EXPORT_KEYWORD,
+    INTERVAL_HOURS,
     INTERVALS_PER_DAY,
     RATE_BUCKETS,
     READTYPE_COLUMNS,
@@ -323,6 +325,17 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for r in readings
         ]
 
+    def exported_readings(self) -> list[tuple[datetime, float, float]]:
+        """Return (when, kwh, earnings) for every export reading, sorted by time.
+
+        The microgeneration counterpart of :meth:`costed_readings`. Feed-in is
+        paid at a single flat rate rather than a time-of-use bucket, so the
+        earnings are simply kWh * export_rate.
+        """
+        readings = [r for r in self._load_readings() if r.kind == "export"]
+        readings.sort(key=lambda item: item.when)
+        return [(r.when, r.kwh, r.kwh * self.export_rate) for r in readings]
+
     async def async_prune(self, keep_days: int) -> dict[str, int]:
         """Trim stored readings to the most recent ``keep_days``, then refresh."""
         result = await self.hass.async_add_executor_job(self._prune, keep_days)
@@ -364,7 +377,12 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if reading.kind == "export"
                     else "Active Import Interval (kW)"
                 )
-                writer.writerow([raw, f"{reading.kwh}", read_type])
+                # read_type below is written with a "(kW)" header, so convert the
+                # stored energy back to mean power. Without this the interval
+                # scaling would be re-applied on the next read and compound.
+                writer.writerow(
+                    [raw, f"{reading.kwh / INTERVAL_HOURS}", read_type]
+                )
 
         LOGGER.info(
             "Pruned ESB readings: kept %s of %s (keep_days=%s); originals in %s",
@@ -465,12 +483,21 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     return []
                 readtype_col = _find_column(reader.fieldnames, READTYPE_COLUMNS)
 
+                # "Active Import Interval (kW)" is a mean power held over the
+                # half-hour interval, so energy is value * 0.5h. Only skip the
+                # scaling if the export already publishes kWh.
+                header = value_col.lower().replace(" ", "")
+                value_scale = (
+                    1.0 if ENERGY_HEADER_MARKER in header else INTERVAL_HOURS
+                )
+
                 readings: list[Reading] = []
                 for row in reader:
                     when = _parse_datetime(row.get(datetime_col, ""))
-                    kwh = _parse_float(row.get(value_col, ""))
-                    if when is None or kwh is None:
+                    value = _parse_float(row.get(value_col, ""))
+                    if when is None or value is None:
                         continue
+                    kwh = value * value_scale
                     if self.time_shift:
                         when += timedelta(minutes=self.time_shift)
                     kind = "import"

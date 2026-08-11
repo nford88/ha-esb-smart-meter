@@ -17,7 +17,13 @@ from homeassistant.components.recorder.statistics import async_add_external_stat
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, STAT_COST_SUFFIX, STAT_ENERGY_SUFFIX
+from .const import (
+    DOMAIN,
+    STAT_COST_SUFFIX,
+    STAT_ENERGY_SUFFIX,
+    STAT_EXPORT_EARNINGS_SUFFIX,
+    STAT_EXPORT_ENERGY_SUFFIX,
+)
 from .coordinator import ESBSmartMeterCoordinator
 
 LOGGER = logging.getLogger(__name__)
@@ -34,6 +40,37 @@ async def async_backfill_statistics(
     if not readings:
         LOGGER.warning("ESB statistics backfill found no readings to import")
         return 0
+
+    # Microgeneration history gets the same treatment, so exported energy and
+    # feed-in earnings appear on the Energy dashboard with their real dates
+    # rather than only accruing from setup time.
+    exported = await hass.async_add_executor_job(coordinator.exported_readings)
+    if exported:
+        export_energy_stats, export_earnings_stats = _build_hourly(exported)
+        for suffix, label, unit, stats in (
+            (STAT_EXPORT_ENERGY_SUFFIX, "exported energy",
+             UnitOfEnergy.KILO_WATT_HOUR, export_energy_stats),
+            (STAT_EXPORT_EARNINGS_SUFFIX, "export earnings",
+             coordinator.currency, export_earnings_stats),
+        ):
+            async_add_external_statistics(
+                hass,
+                StatisticMetaData(
+                    has_mean=False,
+                    has_sum=True,
+                    name=f"{coordinator.name} {label}",
+                    source=DOMAIN,
+                    statistic_id=f"{DOMAIN}:{suffix}",
+                    unit_of_measurement=unit,
+                ),
+                stats,
+            )
+        LOGGER.info(
+            "ESB statistics backfill wrote %s hourly export points",
+            len(export_energy_stats),
+        )
+    else:
+        LOGGER.debug("ESB statistics backfill found no export readings")
 
     energy_stats, cost_stats = _build_hourly(readings)
 

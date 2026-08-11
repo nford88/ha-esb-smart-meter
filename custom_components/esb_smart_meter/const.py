@@ -63,9 +63,24 @@ INTERVALS_PER_DAY = 48
 READTYPE_COLUMNS = ("Read Type", "read_type", "read type")
 EXPORT_KEYWORD = "export"
 
+# ESB HDF "Read Value" is a MEAN POWER in kW sustained over each half-hour
+# interval, not an energy figure - the column header says so: "Active Import
+# Interval (kW)". Energy is therefore value * 0.5 h. Without this factor every
+# reading is double-counted; verified against an independent inverter CT meter,
+# where the scaled figures agree to within ~4% and the unscaled ones are ~2.0x.
+INTERVAL_HOURS = 0.5
+
+# Column headers that already publish energy rather than mean power. If a future
+# ESB export uses one of these, the interval scaling must not be applied.
+ENERGY_HEADER_MARKER = "kwh"
+
 # External-statistics identifiers used for the Energy dashboard backfill.
 STAT_ENERGY_SUFFIX = "import_energy"
 STAT_COST_SUFFIX = "import_cost"
+# Microgeneration counterparts, so exported energy and feed-in earnings get the
+# same backdated history on the Energy dashboard as consumption does.
+STAT_EXPORT_ENERGY_SUFFIX = "export_energy"
+STAT_EXPORT_EARNINGS_SUFFIX = "export_earnings"
 
 SERVICE_RELOAD = "reload"
 SERVICE_DOWNLOAD = "download_latest"
