@@ -14,6 +14,7 @@ from .const import (
     CONF_CHEAP_START,
     CONF_CURRENCY,
     CONF_DAY_START,
+    CONF_DISCOUNT_PERCENT,
     CONF_EXPORT_RATE,
     CONF_IMPORT_PATH,
     CONF_MPRN,
@@ -25,10 +26,12 @@ from .const import (
     CONF_STANDING_CHARGE,
     CONF_TIME_SHIFT_MINUTES,
     CONF_USERNAME,
+    CONF_VAT_PERCENT,
     DEFAULT_CHEAP_END,
     DEFAULT_CHEAP_START,
     DEFAULT_CURRENCY,
     DEFAULT_DAY_START,
+    DEFAULT_DISCOUNT_PERCENT,
     DEFAULT_EXPORT_RATE,
     DEFAULT_IMPORT_PATH,
     DEFAULT_NIGHT_START,
@@ -37,6 +40,7 @@ from .const import (
     DEFAULT_RATES,
     DEFAULT_STANDING_CHARGE,
     DEFAULT_TIME_SHIFT_MINUTES,
+    DEFAULT_VAT_PERCENT,
     DOMAIN,
 )
 
@@ -134,6 +138,12 @@ def _user_schema() -> vol.Schema:
             vol.Required(
                 CONF_EXPORT_RATE, default=DEFAULT_EXPORT_RATE
             ): vol.Coerce(float),
+            vol.Required(
+                CONF_VAT_PERCENT, default=DEFAULT_VAT_PERCENT
+            ): vol.Coerce(float),
+            vol.Required(
+                CONF_DISCOUNT_PERCENT, default=DEFAULT_DISCOUNT_PERCENT
+            ): vol.Coerce(float),
             vol.Required("cheap_rate", default=DEFAULT_RATES["cheap"]): vol.Coerce(float),
             vol.Required("night_rate", default=DEFAULT_RATES["night"]): vol.Coerce(float),
             vol.Required("day_rate", default=DEFAULT_RATES["day"]): vol.Coerce(float),
@@ -196,6 +206,16 @@ def _options_schema(entry: config_entries.ConfigEntry) -> vol.Schema:
             vol.Required(
                 CONF_EXPORT_RATE,
                 default=_current(entry, CONF_EXPORT_RATE, DEFAULT_EXPORT_RATE),
+            ): vol.Coerce(float),
+            vol.Required(
+                CONF_VAT_PERCENT,
+                default=_current(entry, CONF_VAT_PERCENT, DEFAULT_VAT_PERCENT),
+            ): vol.Coerce(float),
+            vol.Required(
+                CONF_DISCOUNT_PERCENT,
+                default=_current(
+                    entry, CONF_DISCOUNT_PERCENT, DEFAULT_DISCOUNT_PERCENT
+                ),
             ): vol.Coerce(float),
             vol.Required("cheap_rate", default=rates["cheap"]): vol.Coerce(float),
             vol.Required("night_rate", default=rates["night"]): vol.Coerce(float),

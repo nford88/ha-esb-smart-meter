@@ -22,6 +22,7 @@ from .const import (
     CONF_CHEAP_START,
     CONF_CURRENCY,
     CONF_DAY_START,
+    CONF_DISCOUNT_PERCENT,
     CONF_EXPORT_RATE,
     CONF_IMPORT_PATH,
     CONF_MPRN,
@@ -33,10 +34,12 @@ from .const import (
     CONF_STANDING_CHARGE,
     CONF_TIME_SHIFT_MINUTES,
     CONF_USERNAME,
+    CONF_VAT_PERCENT,
     DEFAULT_CHEAP_END,
     DEFAULT_CHEAP_START,
     DEFAULT_CURRENCY,
     DEFAULT_DAY_START,
+    DEFAULT_DISCOUNT_PERCENT,
     DEFAULT_EXPORT_RATE,
     DEFAULT_IMPORT_PATH,
     DEFAULT_NIGHT_START,
@@ -46,6 +49,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_STANDING_CHARGE,
     DEFAULT_TIME_SHIFT_MINUTES,
+    DEFAULT_VAT_PERCENT,
     ENERGY_HEADER_MARKER,
     EXPORT_KEYWORD,
     INTERVAL_HOURS,
@@ -134,6 +138,43 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._conf(CONF_STANDING_CHARGE, DEFAULT_STANDING_CHARGE)
         )
         self.export_rate = float(self._conf(CONF_EXPORT_RATE, DEFAULT_EXPORT_RATE))
+        # Stored as percentages because that is how they appear on a bill;
+        # converted to fractions once here rather than at every use.
+        self.vat_percent = float(self._conf(CONF_VAT_PERCENT, DEFAULT_VAT_PERCENT))
+        self.discount_percent = float(
+            self._conf(CONF_DISCOUNT_PERCENT, DEFAULT_DISCOUNT_PERCENT)
+        )
+
+    @property
+    def vat_rate(self) -> float:
+        """VAT as a fraction, e.g. 0.09 for 9%."""
+        return self.vat_percent / 100.0
+
+    @property
+    def discount_rate(self) -> float:
+        """Supplier discount as a fraction, e.g. 0.16 for 16%."""
+        return self.discount_percent / 100.0
+
+    def _bill(self, energy_cost: float, standing_charge: float) -> dict[str, float]:
+        """Build the charge lines of a bill from net energy and standing cost.
+
+        Mirrors how a supplier assembles one: net charges, then the discount,
+        then VAT on what is actually payable. Returned amounts are unrounded;
+        callers round once at the end.
+        """
+        subtotal = energy_cost + standing_charge
+        discount = subtotal * self.discount_rate
+        net = subtotal - discount
+        vat = net * self.vat_rate
+        return {
+            "energy_cost": energy_cost,
+            "standing_charge": standing_charge,
+            "subtotal": subtotal,
+            "discount": discount,
+            "net_cost": net,
+            "vat": vat,
+            "cost": net + vat,
+        }
 
     def has_download_credentials(self) -> bool:
         """Return True if ESB portal download is configured."""
@@ -256,11 +297,38 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         month_complete_days = [d for d in complete_dates if month_start <= d <= today]
         days_in_month = _days_in_month(today)
-        projected_month_cost = (
-            round(month_period["cost"] / len(month_complete_days) * days_in_month, 2)
+
+        # Only the *energy* part of the bill is extrapolated. The standing
+        # charge is deterministic - it accrues once per day for every day of
+        # the month whatever the meter does - so the month-end figure is simply
+        # rate * days_in_month. Scaling it along with usage inflated the
+        # projection by (days_in_month / complete_days - 1) times the standing
+        # charge accrued so far, which was invisible while the default rate was
+        # 0.0 and dominant once a real rate was configured.
+        projected_standing_charge = self.standing_charge * days_in_month
+
+        # Averaged over complete days only, on both sides of the division.
+        # `month_period` spans every day with data including today, so using it
+        # here would extrapolate a part-finished day as though it were whole.
+        complete_energy_cost = sum(
+            periods[day]["cost"] for day in month_complete_days
+        )
+        projected_energy_cost = (
+            complete_energy_cost / len(month_complete_days) * days_in_month
             if month_complete_days
             else 0.0
         )
+
+        # Discount and VAT are applied to the projected net, not extrapolated
+        # themselves - they are percentages of whatever the bill turns out to
+        # be, so they follow from it rather than being estimated separately.
+        projected = self._bill(projected_energy_cost, projected_standing_charge)
+
+        # Without a single complete day there is no basis for the usage half of
+        # the estimate, so no projection is offered rather than reporting the
+        # standing charge alone as though it were one.
+        has_projection = bool(month_complete_days)
+        projected_month_cost = round(projected["cost"], 2) if has_projection else 0.0
 
         total_kwh = round(total_kwh, 3)
         if total_kwh < self._total_high_water:
@@ -309,6 +377,24 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else 0.0,
             "month_complete_day_count": len(month_complete_days),
             "projected_month_cost": projected_month_cost,
+            "projected_month_energy_cost": round(projected["energy_cost"], 2)
+            if has_projection
+            else 0.0,
+            "projected_month_standing_charge": round(projected["standing_charge"], 2)
+            if has_projection
+            else 0.0,
+            "projected_month_discount": round(projected["discount"], 2)
+            if has_projection
+            else 0.0,
+            "projected_month_net_cost": round(projected["net_cost"], 2)
+            if has_projection
+            else 0.0,
+            "projected_month_vat": round(projected["vat"], 2)
+            if has_projection
+            else 0.0,
+            "days_in_month": days_in_month,
+            "vat_percent": self.vat_percent,
+            "discount_percent": self.discount_percent,
             "message": "OK",
             **export_block,
         }
@@ -317,11 +403,19 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Return (when, kwh, cost) for every reading, sorted by time.
 
         Used by the statistics backfill. Import readings only (consumption).
+
+        Costs carry the discount and VAT so the Energy dashboard shows what is
+        actually payable. The standing charge is deliberately absent: it is a
+        per-day charge with no per-interval meaning, and spreading it over
+        readings would attribute fixed cost to usage.
         """
         readings = [r for r in self._load_readings() if r.kind == "import"]
         readings.sort(key=lambda item: item.when)
+        # Discount then VAT collapse to a single multiplier on the net energy
+        # cost, since neither depends on the amount.
+        factor = (1.0 - self.discount_rate) * (1.0 + self.vat_rate)
         return [
-            (r.when, r.kwh, r.kwh * self._rate(self._bucket_for(r.when)))
+            (r.when, r.kwh, r.kwh * self._rate(self._bucket_for(r.when)) * factor)
             for r in readings
         ]
 
@@ -331,6 +425,9 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         The microgeneration counterpart of :meth:`costed_readings`. Feed-in is
         paid at a single flat rate rather than a time-of-use bucket, so the
         earnings are simply kWh * export_rate.
+
+        No VAT and no supplier discount here: feed-in payments to a domestic
+        microgenerator are income rather than a charge, so neither applies.
         """
         readings = [r for r in self._load_readings() if r.kind == "export"]
         readings.sort(key=lambda item: item.when)
@@ -441,14 +538,25 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _finalize_period(
         self, period: dict[str, float] | None, *, days: int
     ) -> dict[str, float]:
-        """Round a period and fold in the daily standing charge."""
+        """Round a period and build its bill lines.
+
+        `energy_cost`, `standing_charge` and the per-bucket costs are NET
+        amounts before discount and VAT, laid out the way a bill is: net lines
+        first, then the discount and VAT as their own lines, then the total.
+        VAT on the standing charge cannot be attributed to a usage bucket, so
+        mixing it into the buckets would make them stop summing to anything
+        meaningful.
+        """
         period = period or _empty_one_period()
-        standing = self.standing_charge * days
+        bill = self._bill(period.get("cost", 0.0), self.standing_charge * days)
         result: dict[str, float] = {
             "total_kwh": round(period.get("total_kwh", 0.0), 3),
-            "energy_cost": round(period.get("cost", 0.0), 3),
-            "standing_charge": round(standing, 3),
-            "cost": round(period.get("cost", 0.0) + standing, 3),
+            "energy_cost": round(bill["energy_cost"], 3),
+            "standing_charge": round(bill["standing_charge"], 3),
+            "discount": round(bill["discount"], 3),
+            "net_cost": round(bill["net_cost"], 3),
+            "vat": round(bill["vat"], 3),
+            "cost": round(bill["cost"], 3),
         }
         for bucket in RATE_BUCKETS:
             result[f"{bucket}_kwh"] = round(period.get(f"{bucket}_kwh", 0.0), 3)

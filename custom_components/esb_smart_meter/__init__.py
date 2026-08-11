@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -17,6 +18,7 @@ from .const import (
     CONF_CHEAP_START,
     CONF_CURRENCY,
     CONF_DAY_START,
+    CONF_DISCOUNT_PERCENT,
     CONF_EXPORT_RATE,
     CONF_IMPORT_PATH,
     CONF_KEEP_DAYS,
@@ -26,13 +28,16 @@ from .const import (
     CONF_PEAK_END,
     CONF_PEAK_START,
     CONF_RATES,
+    CONF_REBUILD,
     CONF_STANDING_CHARGE,
     CONF_TIME_SHIFT_MINUTES,
     CONF_USERNAME,
+    CONF_VAT_PERCENT,
     DEFAULT_CHEAP_END,
     DEFAULT_CHEAP_START,
     DEFAULT_CURRENCY,
     DEFAULT_DAY_START,
+    DEFAULT_DISCOUNT_PERCENT,
     DEFAULT_EXPORT_RATE,
     DEFAULT_IMPORT_PATH,
     DEFAULT_KEEP_DAYS,
@@ -42,6 +47,7 @@ from .const import (
     DEFAULT_RATES,
     DEFAULT_STANDING_CHARGE,
     DEFAULT_TIME_SHIFT_MINUTES,
+    DEFAULT_VAT_PERCENT,
     DOMAIN,
     PLATFORMS,
     SERVICE_DOWNLOAD,
@@ -86,6 +92,12 @@ CONFIG_SCHEMA = vol.Schema(
                 ): vol.Coerce(float),
                 vol.Optional(
                     CONF_EXPORT_RATE, default=DEFAULT_EXPORT_RATE
+                ): vol.Coerce(float),
+                vol.Optional(
+                    CONF_VAT_PERCENT, default=DEFAULT_VAT_PERCENT
+                ): vol.Coerce(float),
+                vol.Optional(
+                    CONF_DISCOUNT_PERCENT, default=DEFAULT_DISCOUNT_PERCENT
                 ): vol.Coerce(float),
                 vol.Optional(CONF_RATES, default=DEFAULT_RATES): RATE_SCHEMA,
                 vol.Optional(CONF_USERNAME): cv.string,
@@ -140,8 +152,9 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     async def handle_import_statistics(call: ServiceCall) -> None:
         """Backfill CSV history into long-term statistics."""
+        rebuild = call.data.get(CONF_REBUILD, False)
         for coordinator in _coordinators(hass):
-            await async_backfill_statistics(hass, coordinator)
+            await async_backfill_statistics(hass, coordinator, rebuild=rebuild)
 
     async def handle_prune(call: ServiceCall) -> None:
         """Trim stored readings to the most recent keep_days."""
@@ -159,7 +172,10 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_RELOAD, handle_reload)
     hass.services.async_register(DOMAIN, SERVICE_DOWNLOAD, handle_download)
     hass.services.async_register(
-        DOMAIN, SERVICE_IMPORT_STATISTICS, handle_import_statistics
+        DOMAIN,
+        SERVICE_IMPORT_STATISTICS,
+        handle_import_statistics,
+        schema=vol.Schema({vol.Optional(CONF_REBUILD, default=False): cv.boolean}),
     )
     hass.services.async_register(
         DOMAIN,
@@ -203,6 +219,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _sync_repair_issue()
     entry.async_on_unload(coordinator.async_add_listener(_sync_repair_issue))
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    # Keep long-term statistics in step with the CSVs automatically. The
+    # backfill resumes from the newest stored point, so each run only writes
+    # the handful of hours that are actually new and this stays cheap at the
+    # coordinator's 30-minute cadence. The import_statistics service remains
+    # for forcing a full rebuild.
+    stats_lock = asyncio.Lock()
+
+    async def _run_backfill() -> None:
+        """Import any newly available hours into long-term statistics."""
+        if stats_lock.locked():
+            # A previous run is still going; the next refresh will catch up.
+            return
+        async with stats_lock:
+            try:
+                await async_backfill_statistics(hass, coordinator)
+            except Exception:  # noqa: BLE001 - never let this break the entry
+                LOGGER.exception("ESB statistics backfill failed")
+
+    @callback
+    def _schedule_backfill() -> None:
+        """Queue a statistics backfill after a successful refresh."""
+        if "recorder" not in hass.config.components:
+            return
+        if not (coordinator.data and coordinator.data.get("available")):
+            return
+        entry.async_create_background_task(
+            hass, _run_backfill(), f"{DOMAIN}_statistics_{entry.entry_id}"
+        )
+
+    entry.async_on_unload(coordinator.async_add_listener(_schedule_backfill))
+    # The first refresh already happened above, so seed history right away
+    # rather than waiting for the next poll.
+    _schedule_backfill()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

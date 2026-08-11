@@ -4,6 +4,9 @@ import pytest
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
+# "Read Value" under an ESB HDF export is MEAN POWER in kW over the half-hour
+# interval, so the energy each row contributes is half the number below. The
+# expectations in the tests are in kWh and account for that.
 SAMPLE_CSV = (
     "Read Date and End Time,Read Value\n"
     "01-01-2026 00:30,0.500\n"
@@ -12,6 +15,8 @@ SAMPLE_CSV = (
     "01-01-2026 18:00,1.000\n"  # peak (17:00-19:00)
     "01-01-2026 12:00,0.800\n"  # day
 )
+# 3.2 kW of half-hour means -> 1.6 kWh of energy.
+SAMPLE_CSV_KWH = 1.6
 
 
 @pytest.fixture(autouse=True)

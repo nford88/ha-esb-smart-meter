@@ -141,12 +141,17 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     _energy("today_day_energy", "today_day_energy", _period_value("today", "day_kwh")),
     _energy("today_peak_energy", "today_peak_energy", _period_value("today", "peak_kwh")),
     _cost("today_cost", "today_cost", _period_value("today", "cost")),
+    _cost("today_vat", "today_vat", _period_value("today", "vat")),
+    _cost("today_discount", "today_discount", _period_value("today", "discount")),
     # --- yesterday ---------------------------------------------------------
     _energy("yesterday_energy", "yesterday_energy", _period_value("yesterday", "total_kwh")),
     _cost("yesterday_cost", "yesterday_cost", _period_value("yesterday", "cost")),
     # --- month -------------------------------------------------------------
     _energy("month_energy", "month_energy", _period_value("month", "total_kwh")),
     _cost("month_cost", "month_cost", _period_value("month", "cost")),
+    _cost("month_net_cost", "month_net_cost", _period_value("month", "net_cost")),
+    _cost("month_vat", "month_vat", _period_value("month", "vat")),
+    _cost("month_discount", "month_discount", _period_value("month", "discount")),
     _cost("month_cheap_cost", "month_cheap_cost", _period_value("month", "cheap_cost")),
     _cost("month_night_cost", "month_night_cost", _period_value("month", "night_cost")),
     _cost("month_day_cost", "month_day_cost", _period_value("month", "day_cost")),
@@ -163,6 +168,13 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
         icon="mdi:chart-line",
         device_class=SensorDeviceClass.MONETARY,
         value_fn=lambda data: _round(data.get("projected_month_cost")),
+    ),
+    ESBSensorDescription(
+        key="projected_month_energy_cost",
+        translation_key="projected_month_energy_cost",
+        icon="mdi:chart-line",
+        device_class=SensorDeviceClass.MONETARY,
+        value_fn=lambda data: _round(data.get("projected_month_energy_cost")),
     ),
     # --- most recent complete day -----------------------------------------
     ESBSensorDescription(
@@ -319,12 +331,43 @@ class ESBSmartMeterSensor(CoordinatorEntity[ESBSmartMeterCoordinator], SensorEnt
             attrs = {f"{b}_cost": period.get(f"{b}_cost") for b in RATE_BUCKETS}
             attrs["complete_days"] = data.get("month_complete_day_count")
             attrs["projected_cost"] = data.get("projected_month_cost")
+            attrs.update(_bill_lines(period, data))
             return attrs
+        if key in ("today_cost", "yesterday_cost"):
+            return _bill_lines(data.get(key.split("_")[0], {}), data)
+        if key == "projected_month_cost":
+            # Every line is exposed because they are derived differently: usage
+            # is extrapolated, the standing charge is fixed, and the discount
+            # and VAT follow from whatever the other two come to.
+            return {
+                "energy_cost": data.get("projected_month_energy_cost"),
+                "standing_charge": data.get("projected_month_standing_charge"),
+                "discount": data.get("projected_month_discount"),
+                "net_cost": data.get("projected_month_net_cost"),
+                "vat": data.get("projected_month_vat"),
+                "complete_days": data.get("month_complete_day_count"),
+                "days_in_month": data.get("days_in_month"),
+                "vat_percent": data.get("vat_percent"),
+                "discount_percent": data.get("discount_percent"),
+            }
         if key == "recent_complete_date":
             return {"breakdown": data.get("recent_complete", {})}
         if key in ("last_7_complete_day_cost", "last_7_complete_day_energy"):
             return {"days": data.get("last_7_complete_days", [])}
         return {}
+
+
+def _bill_lines(period: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Return the itemised bill breakdown behind a cost sensor."""
+    return {
+        "energy_cost": period.get("energy_cost"),
+        "standing_charge": period.get("standing_charge"),
+        "discount": period.get("discount"),
+        "net_cost": period.get("net_cost"),
+        "vat": period.get("vat"),
+        "vat_percent": data.get("vat_percent"),
+        "discount_percent": data.get("discount_percent"),
+    }
 
 
 def _round(value: Any) -> Any:

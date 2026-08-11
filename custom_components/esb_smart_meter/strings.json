@@ -20,6 +20,8 @@
           "currency": "Currency",
           "standing_charge": "Daily standing charge",
           "export_rate": "Export / feed-in rate (per kWh)",
+          "vat_percent": "VAT rate (%, e.g. 9)",
+          "discount_percent": "Supplier discount (%, e.g. 16)",
           "cheap_rate": "Cheap rate",
           "night_rate": "Night rate",
           "day_rate": "Day rate",
@@ -49,6 +51,8 @@
           "currency": "Currency",
           "standing_charge": "Daily standing charge",
           "export_rate": "Export / feed-in rate (per kWh)",
+          "vat_percent": "VAT rate (%, e.g. 9)",
+          "discount_percent": "Supplier discount (%, e.g. 16)",
           "cheap_rate": "Cheap rate",
           "night_rate": "Night rate",
           "day_rate": "Day rate",
@@ -75,15 +79,21 @@
       "today_day_energy": { "name": "Today day energy" },
       "today_peak_energy": { "name": "Today peak energy" },
       "today_cost": { "name": "Today cost" },
+      "today_vat": { "name": "Today VAT" },
+      "today_discount": { "name": "Today discount" },
       "yesterday_energy": { "name": "Yesterday energy" },
       "yesterday_cost": { "name": "Yesterday cost" },
       "month_energy": { "name": "Month energy" },
       "month_cost": { "name": "Month cost" },
+      "month_net_cost": { "name": "Month net cost" },
+      "month_vat": { "name": "Month VAT" },
+      "month_discount": { "name": "Month discount" },
       "month_cheap_cost": { "name": "Month cheap cost" },
       "month_night_cost": { "name": "Month night cost" },
       "month_day_cost": { "name": "Month day cost" },
       "month_complete_days": { "name": "Month complete days" },
       "projected_month_cost": { "name": "Projected month cost" },
+      "projected_month_energy_cost": { "name": "Projected month energy cost" },
       "recent_complete_date": { "name": "Most recent complete date" },
       "recent_complete_energy": { "name": "Most recent complete day energy" },
       "recent_complete_cost": { "name": "Most recent complete day cost" },
@@ -116,7 +126,13 @@
     },
     "import_statistics": {
       "name": "Import history into statistics",
-      "description": "Backfill available CSV history into long-term statistics so past usage and cost appear on the Energy dashboard."
+      "description": "Backfill available CSV history into long-term statistics so past usage and cost appear on the Energy dashboard. This also runs automatically after each refresh.",
+      "fields": {
+        "rebuild": {
+          "name": "Rebuild from scratch",
+          "description": "Rewrite the whole series from a zero total instead of continuing from the newest recorded point. Only use this to repair a corrupted series."
+        }
+      }
     },
     "prune": {
       "name": "Prune old readings",

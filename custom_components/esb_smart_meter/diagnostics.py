@@ -36,6 +36,8 @@ async def async_get_config_entry_diagnostics(
             "currency": coordinator.currency,
             "standing_charge": coordinator.standing_charge,
             "export_rate": coordinator.export_rate,
+            "vat_percent": coordinator.vat_percent,
+            "discount_percent": coordinator.discount_percent,
             "rates": coordinator.rates,
             "download_configured": coordinator.has_download_credentials(),
         },

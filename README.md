@@ -30,6 +30,8 @@ have the interval CSV files this integration reads.
   and the latest interval reading.
 - Estimates energy cost using configurable `cheap`, `night`, `day`, and `peak`
   rates, a configurable currency, and an optional daily standing charge.
+- **VAT and supplier discount** — both configurable, applied in bill order, and
+  reported as their own lines so the total can be checked against a real bill.
 - **Fully configurable tariff bands** — the cheap/boost, night, day, and peak
   window times are all set to match *your* supplier plan (see below).
 - Per-bucket energy and cost breakdowns, a projected month-end cost, and a
@@ -37,8 +39,8 @@ have the interval CSV files this integration reads.
 - Exposes the current rate bucket and current rate as sensors.
 - **Optional ESB Networks portal download** — enter your account details and
   Home Assistant can fetch the CSV for you (`esb_smart_meter.download_latest`).
-- **Energy dashboard backfill** — import your full CSV history into long-term
-  statistics (`esb_smart_meter.import_statistics`).
+- **Energy dashboard backfill** — your full CSV history is imported into
+  long-term statistics automatically, and stays continuous across pruning.
 - Options flow: change paths, tariff bands, and rates any time without
   removing the integration.
 - Diagnostics download and a repair issue when no data is found.
@@ -64,6 +66,50 @@ sums to the total:
 
 Adjust `cheap_start`/`cheap_end`, `night_start`, `day_start`, `peak_start`, and
 `peak_end` to match your plan.
+
+## How the cost is built
+
+The unit rates and standing charge you enter are treated as **net (ex-VAT)**
+amounts. The bill is then assembled the way a supplier assembles one:
+
+```text
+  energy      = kWh x rate (per tariff band)
+  standing    = daily standing charge x days
+  subtotal    = energy + standing
+  discount    = subtotal x discount %      <- comes off before VAT
+  net         = subtotal - discount
+  VAT         = net x VAT %
+  total       = net + VAT
+```
+
+The discount is applied **before** VAT because VAT is charged on the amount
+actually payable, not on the pre-discount figure.
+
+| Setting                  | Default | Notes                                   |
+| ------------------------ | ------- | --------------------------------------- |
+| `vat_percent`            | `9`     | Irish domestic electricity rate         |
+| `discount_percent`       | `0`     | Whatever your plan gives you, e.g. `16` |
+
+Both are set during onboarding and changeable any time via the integration's
+options. Enter them as percentages (`9`, `16`), not decimals.
+
+Two deliberate choices worth knowing:
+
+- **VAT applies to the standing charge**, not just to units — that is how it is
+  charged in Ireland.
+- **The discount is taken off the whole subtotal**, units *and* standing charge.
+  Some plans discount unit rates only; if yours does, the reported figure will
+  be slightly low. The `discount` line is exposed as its own sensor and
+  attribute so you can check it against a bill.
+- **Export earnings carry neither.** Feed-in payments to a domestic
+  microgenerator are income rather than a charge, so VAT and the discount do
+  not touch them.
+
+Per-bucket costs (`cheap_cost`, `day_cost`, …) stay **net and pre-discount**, so
+they sum to `energy_cost`. VAT on the standing charge cannot be attributed to a
+usage band, so folding it into the buckets would stop them summing to anything
+meaningful — the same reason a bill lists net lines first and VAT once at the
+bottom.
 
 ## HACS Installation
 
@@ -146,7 +192,9 @@ esb_smart_meter:
   import_path: /config/esb_energy
   time_shift_minutes: -30
   currency: EUR
-  standing_charge: 0.0        # daily fixed charge, in your currency
+  standing_charge: 0.0        # daily fixed charge, in your currency (ex-VAT)
+  vat_percent: 9.0            # Irish domestic electricity VAT
+  discount_percent: 0.0       # supplier discount, e.g. 16 for 16% off
   cheap_start: "02:00"
   cheap_end: "04:00"
   night_start: "23:00"
@@ -211,7 +259,7 @@ diagnostic sensors remain available even when no CSV data has been found.
 | ----------------------------------- | -------------------------------------------------------- |
 | `esb_smart_meter.reload`            | Re-scan the CSV folder and refresh all sensors.          |
 | `esb_smart_meter.download_latest`   | Log in to ESB Networks and download the latest CSV.      |
-| `esb_smart_meter.import_statistics` | Backfill CSV history into the Energy dashboard.          |
+| `esb_smart_meter.import_statistics` | Force a statistics import (runs automatically anyway).   |
 | `esb_smart_meter.prune`             | Consolidate/trim the CSV folder to the most recent days. |
 
 ## Solar export / microgeneration
@@ -258,12 +306,32 @@ automation:
 
 ## Energy dashboard history
 
-The regular sensors only accrue from the moment you install the integration.
-To see your full history on the Energy dashboard, call
-`esb_smart_meter.import_statistics` once after importing CSVs. It pushes your
-whole CSV history into Home Assistant long-term statistics as external
-statistics (`esb_smart_meter:import_energy` and `esb_smart_meter:import_cost`).
-Running it again is safe — existing points are updated in place.
+The regular sensors only accrue from the moment you install the integration, so
+your CSV history is pushed into Home Assistant long-term statistics separately,
+as external statistics:
+
+| Statistic ID                        | Contents                    |
+| ----------------------------------- | --------------------------- |
+| `esb_smart_meter:import_energy`     | Imported energy (kWh)       |
+| `esb_smart_meter:import_cost`       | Imported cost               |
+| `esb_smart_meter:export_energy`     | Exported energy (kWh)       |
+| `esb_smart_meter:export_earnings`   | Feed-in earnings            |
+
+**This happens automatically** after every refresh, so history appears on the
+Energy dashboard as soon as new CSVs land — no service call needed. Each run
+resumes from the newest point already recorded and writes only the new hours,
+so it stays cheap at the 30-minute polling interval.
+
+Because the running totals continue from what the recorder holds rather than
+being recomputed from the files on disk, `esb_smart_meter.prune` is safe: the
+Energy dashboard keeps a continuous series even after old CSVs are trimmed
+away.
+
+`esb_smart_meter.import_statistics` is still available to trigger an import by
+hand. It takes an optional **`rebuild`** flag that rewrites the whole series
+from a zero total — a repair tool for a corrupted series only. If old readings
+have already been pruned, a rebuild will *not* line up with the older points
+the recorder still holds, so leave it off unless you mean it.
 
 ## Privacy
 

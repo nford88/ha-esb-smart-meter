@@ -13,9 +13,21 @@ download_latest:
 import_statistics:
   name: Import history into statistics
   description: >-
-    Backfill all available CSV history into Home Assistant long-term statistics
-    so past usage and cost appear on the Energy dashboard. Safe to run again;
-    existing points are updated in place.
+    Backfill available CSV history into Home Assistant long-term statistics so
+    past usage and cost appear on the Energy dashboard. This also runs
+    automatically after each refresh, so calling it by hand is rarely needed.
+    Safe to run again; existing points are updated in place.
+  fields:
+    rebuild:
+      name: Rebuild from scratch
+      description: >-
+        Rewrite the whole series from a zero total instead of continuing from
+        the newest point already recorded. Only use this to repair a corrupted
+        series - if old readings have since been pruned, the rebuilt totals
+        will not line up with history the recorder still holds.
+      default: false
+      selector:
+        boolean:
 
 prune:
   name: Prune old readings
