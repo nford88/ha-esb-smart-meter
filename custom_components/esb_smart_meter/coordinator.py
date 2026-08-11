@@ -585,9 +585,28 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 reader = csv.DictReader(file_obj, dialect=dialect)
                 if not reader.fieldnames:
                     return []
-                datetime_col = _find_column(reader.fieldnames, DATETIME_COLUMNS)
+                datetime_col = _find_column(
+                    reader.fieldnames, DATETIME_COLUMNS, fuzzy=True
+                )
                 value_col = _find_column(reader.fieldnames, VALUE_COLUMNS)
                 if datetime_col is None or value_col is None:
+                    # Say which column is missing and what the file actually
+                    # has. Silently skipping leaves the user with an empty
+                    # integration and no way to tell why.
+                    missing = " and ".join(
+                        label
+                        for label, found in (
+                            ("timestamp", datetime_col),
+                            ("value", value_col),
+                        )
+                        if found is None
+                    )
+                    LOGGER.warning(
+                        "Ignoring %s: no %s column found. Headers present: %s",
+                        csv_path.name,
+                        missing,
+                        ", ".join(reader.fieldnames),
+                    )
                     return []
                 readtype_col = _find_column(reader.fieldnames, READTYPE_COLUMNS)
 
@@ -691,8 +710,16 @@ def _days_in_month(value: date) -> int:
     return (next_month - date(value.year, value.month, 1)).days
 
 
-def _find_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
-    """Find a CSV column by exact or normalized name."""
+def _find_column(
+    fieldnames: list[str], candidates: tuple[str, ...], *, fuzzy: bool = False
+) -> str | None:
+    """Find a CSV column by exact or normalized name.
+
+    `fuzzy` additionally accepts any header that merely looks like an ESB
+    timestamp ("read", "date" and "time" somewhere in it). It has to stay
+    opt-in: applied to the value or read-type lookups, that heuristic happily
+    returns the timestamp column, which is never a sensible answer for either.
+    """
     normalized = {_normalize(name): name for name in fieldnames}
     for candidate in candidates:
         if candidate in fieldnames:
@@ -700,10 +727,11 @@ def _find_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | No
         match = normalized.get(_normalize(candidate))
         if match:
             return match
-    for fieldname in fieldnames:
-        lower = fieldname.lower()
-        if "read" in lower and "date" in lower and "time" in lower:
-            return fieldname
+    if fuzzy:
+        for fieldname in fieldnames:
+            lower = fieldname.lower()
+            if "read" in lower and "date" in lower and "time" in lower:
+                return fieldname
     return None
 
 

@@ -155,6 +155,7 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     _cost("month_cheap_cost", "month_cheap_cost", _period_value("month", "cheap_cost")),
     _cost("month_night_cost", "month_night_cost", _period_value("month", "night_cost")),
     _cost("month_day_cost", "month_day_cost", _period_value("month", "day_cost")),
+    _cost("month_peak_cost", "month_peak_cost", _period_value("month", "peak_cost")),
     ESBSensorDescription(
         key="month_complete_days",
         translation_key="month_complete_days",
@@ -193,6 +194,8 @@ SENSORS: tuple[ESBSensorDescription, ...] = (
     _cost("recent_complete_night_cost", "recent_complete_night_cost", _recent_value("night_cost")),
     _energy("recent_complete_day_energy", "recent_complete_day_energy", _recent_value("day_kwh")),
     _cost("recent_complete_day_cost", "recent_complete_day_cost", _recent_value("day_cost")),
+    _energy("recent_complete_peak_energy", "recent_complete_peak_energy", _recent_value("peak_kwh")),
+    _cost("recent_complete_peak_cost", "recent_complete_peak_cost", _recent_value("peak_cost")),
     # --- 7-day lookback ----------------------------------------------------
     _cost("last_7_complete_day_cost", "last_7_complete_day_cost",
           lambda data: _round(data.get("last_7_cost", 0.0))),

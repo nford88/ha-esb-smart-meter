@@ -360,6 +360,80 @@ async def test_projection_zero_without_a_complete_day(hass, tmp_path):
     assert data["projected_month_cost"] == 0.0
 
 
+async def test_unknown_value_column_is_reported_not_guessed(hass, tmp_path, caplog):
+    """A file with no recognisable value column must be skipped and explained.
+
+    The timestamp lookup accepts any header that looks like an ESB timestamp.
+    That heuristic used to run for the value lookup too, so a file like this
+    matched the timestamp column as its value column - the rows then failed to
+    parse as floats and the file yielded nothing, with no clue as to why.
+    """
+    (tmp_path / "odd.csv").write_text(
+        "Read Date and End Time,Consumption\n01-01-2026 12:00,2.000\n",
+        encoding="utf-8",
+    )
+    coordinator = ESBSmartMeterCoordinator(hass, _entry(tmp_path))
+    data = await coordinator._async_update_data()
+
+    assert data["records"] == 0
+    assert "no value column found" in caplog.text
+    # The message has to name the headers, or it does not help anyone.
+    assert "Consumption" in caplog.text
+    assert "odd.csv" in caplog.text
+
+
+async def test_timestamp_column_still_matched_loosely(hass, tmp_path):
+    """The loose timestamp match is deliberate and must survive the fix."""
+    (tmp_path / "loose.csv").write_text(
+        "MPRN,Read Date & End Time (GMT),Read Value (kWh)\n"
+        "10,01-01-2026 12:00,2.000\n",
+        encoding="utf-8",
+    )
+    coordinator = ESBSmartMeterCoordinator(hass, _entry(tmp_path))
+    data = await coordinator._async_update_data()
+    assert data["records"] == 1
+    assert data["total_import_kwh"] == pytest.approx(2.0)
+
+
+async def test_peak_bucket_is_reported_for_month_and_recent_day(hass, tmp_path):
+    """Peak had energy sensors but no month/recent-day cost counterpart."""
+    from datetime import timedelta
+
+    yesterday = dt_util.now().date() - timedelta(days=1)
+    lines = ["Read Date and End Time,Read Value (kWh)"]
+    for hour in range(24):
+        for minute in (0, 30):
+            lines.append(
+                f"{yesterday.strftime('%d-%m-%Y')} {hour:02d}:{minute:02d},0.100"
+            )
+    (tmp_path / "y.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    coordinator = ESBSmartMeterCoordinator(
+        hass,
+        _entry(
+            tmp_path,
+            **{
+                CONF_RATES: dict.fromkeys(
+                    ("cheap", "night", "day", "peak", "other"), 1.0
+                )
+            },
+        ),
+    )
+    data = await coordinator._async_update_data()
+
+    # 17:00-19:00 is four half-hours at 0.1 kWh.
+    assert data["month"]["peak_kwh"] == pytest.approx(0.4)
+    assert data["month"]["peak_cost"] == pytest.approx(0.4)
+    assert data["recent_complete"]["peak_kwh"] == pytest.approx(0.4)
+    assert data["recent_complete"]["peak_cost"] == pytest.approx(0.4)
+
+    # Every band must be present for the four to sum to the whole day.
+    month = data["month"]
+    assert sum(month[f"{b}_kwh"] for b in ("cheap", "night", "day", "peak")) == (
+        pytest.approx(month["total_kwh"])
+    )
+
+
 async def test_kw_readings_are_scaled_to_kwh(hass, tmp_path):
     """"Read Value" is mean kW over a half hour, so energy is half of it."""
     (tmp_path / "kw.csv").write_text(

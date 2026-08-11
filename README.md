@@ -281,7 +281,7 @@ device and sensor name, e.g. `sensor.esb_smart_meter_today_cost`.
 | Today VAT, Month VAT                     | VAT component                   |
 | Today discount, Month discount           | Discount applied                |
 | Month net cost                           | After discount, before VAT      |
-| Month cheap / night / day cost           | Net, pre-discount               |
+| Month cheap / night / day / peak cost    | Net, pre-discount               |
 | Month complete days                      | Full days of data this month    |
 | Projected month cost                     | See above; fully itemised in attributes |
 | Projected month energy cost              | The extrapolated half alone     |
@@ -291,7 +291,7 @@ device and sensor name, e.g. `sensor.esb_smart_meter_today_cost`.
 | Sensor                              | Notes                                   |
 | ----------------------------------- | --------------------------------------- |
 | Most recent complete date           | Newest day with all 48 intervals        |
-| Most recent complete day energy/cost | Plus cheap / night / day breakdowns    |
+| Most recent complete day energy/cost | Plus cheap / night / day / peak breakdowns |
 | Cost / Energy, last 7 complete days |                                         |
 | Average daily cost / energy (7 day) |                                         |
 
@@ -431,8 +431,12 @@ type contains *export* are treated as microgeneration rather than consumption; a
 file with no such column is read entirely as consumption.
 
 Timestamps are parsed as `DD-MM-YYYY HH:MM`, `YYYY-MM-DD HH:MM[:SS]`,
-`DD/MM/YYYY HH:MM[:SS]`, or ISO format. A file that cannot be parsed is logged
-and skipped rather than failing the whole import.
+`DD/MM/YYYY HH:MM[:SS]`, or ISO format.
+
+A file that cannot be parsed is skipped rather than failing the whole import. If
+its timestamp or value column cannot be identified, a warning naming the file and
+listing the headers it *does* have is written to the Home Assistant log — check
+there first if **Records** stays at zero.
 
 ## YAML configuration
 
