@@ -26,6 +26,39 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_MPRN = "mprn"
 
+# Automatic portal-download schedule. Every download is a fresh login against
+# ESB's bot-detecting Azure B2C flow, so the schedule is the entire exposure:
+# - manual (default): never auto-download; user calls the download service
+# - daily_window: one download per day at a random time inside a window
+# - interval: a download every N minutes after the previous one
+CONF_DOWNLOAD_MODE = "download_mode"
+DOWNLOAD_MODE_MANUAL = "manual"
+DOWNLOAD_MODE_DAILY_WINDOW = "daily_window"
+DOWNLOAD_MODE_INTERVAL = "interval"
+DEFAULT_DOWNLOAD_MODE = DOWNLOAD_MODE_MANUAL
+
+CONF_WINDOW_START_HOUR = "download_window_start_hour"
+CONF_WINDOW_END_HOUR = "download_window_end_hour"
+DEFAULT_WINDOW_START_HOUR = 9
+DEFAULT_WINDOW_END_HOUR = 12
+
+CONF_INTERVAL_MINUTES = "download_interval_minutes"
+DEFAULT_INTERVAL_MINUTES = 24 * 60
+# Anything more frequent risks ESB's multi-hour captcha lockout.
+MIN_INTERVAL_MINUTES = 30
+
+# After a failed scheduled download, retry once this many hours later (captcha
+# lockouts clear in ~6h), then wait for the next slot.
+RETRY_MIN_HOURS = 6
+RETRY_MAX_HOURS = 8
+
+# download_latest status, surfaced through a sensor so the UI can show whether
+# the last automatic download succeeded and, if not, why.
+DOWNLOAD_STATUS_OK = "ok"
+DOWNLOAD_STATUS_FAILED = "failed"
+DOWNLOAD_STATUS_CAPTCHA = "captcha_lockout"
+DOWNLOAD_STATUS_NEVER = "never_run"
+
 DEFAULT_IMPORT_PATH = "/config/esb_energy"
 DEFAULT_TIME_SHIFT_MINUTES = -30
 DEFAULT_CHEAP_START = "02:00"

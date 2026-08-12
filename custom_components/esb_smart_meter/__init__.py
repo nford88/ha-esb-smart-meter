@@ -56,6 +56,7 @@ from .const import (
     SERVICE_RELOAD,
 )
 from .coordinator import ESBSmartMeterCoordinator
+from .scheduler import async_setup_download_schedule
 from .statistics import async_backfill_statistics
 
 LOGGER = logging.getLogger(__name__)
@@ -253,6 +254,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # The first refresh already happened above, so seed history right away
     # rather than waiting for the next poll.
     _schedule_backfill()
+
+    # Automatic portal downloads (opt-in via options). Manual mode / no
+    # credentials returns a no-op unsubscribe.
+    entry.async_on_unload(async_setup_download_schedule(hass, entry, coordinator))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

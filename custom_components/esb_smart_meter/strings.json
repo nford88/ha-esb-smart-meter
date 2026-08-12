@@ -57,65 +57,185 @@
           "night_rate": "Night rate",
           "day_rate": "Day rate",
           "peak_rate": "Peak rate",
-          "other_rate": "Other rate"
+          "other_rate": "Other rate",
+          "download_mode": "Automatic download mode",
+          "download_window_start_hour": "Daily window start hour (0-23)",
+          "download_window_end_hour": "Daily window end hour (1-24)",
+          "download_interval_minutes": "Interval between downloads (minutes, min 30)"
+        },
+        "data_description": {
+          "download_mode": "manual = never auto-download (call the service yourself); daily_window = one download/day at a random time in the window (recommended); interval = every N minutes. Every download is a login against ESB's bot detection, so keep it infrequent."
         }
       }
     }
   },
   "entity": {
     "sensor": {
-      "last_import": { "name": "Last import" },
-      "last_reading": { "name": "Last reading" },
-      "last_reading_age": { "name": "Last reading age" },
-      "records": { "name": "Records" },
-      "coverage_days": { "name": "Coverage days" },
-      "latest_interval_energy": { "name": "Latest interval energy" },
-      "total_import": { "name": "Total import" },
-      "current_rate_bucket": { "name": "Current rate bucket" },
-      "current_rate": { "name": "Current rate" },
-      "today_energy": { "name": "Today energy" },
-      "today_cheap_energy": { "name": "Today cheap energy" },
-      "today_night_energy": { "name": "Today night energy" },
-      "today_day_energy": { "name": "Today day energy" },
-      "today_peak_energy": { "name": "Today peak energy" },
-      "today_cost": { "name": "Today cost" },
-      "today_vat": { "name": "Today VAT" },
-      "today_discount": { "name": "Today discount" },
-      "yesterday_energy": { "name": "Yesterday energy" },
-      "yesterday_cost": { "name": "Yesterday cost" },
-      "month_energy": { "name": "Month energy" },
-      "month_cost": { "name": "Month cost" },
-      "month_net_cost": { "name": "Month net cost" },
-      "month_vat": { "name": "Month VAT" },
-      "month_discount": { "name": "Month discount" },
-      "month_cheap_cost": { "name": "Month cheap cost" },
-      "month_night_cost": { "name": "Month night cost" },
-      "month_day_cost": { "name": "Month day cost" },
-      "month_peak_cost": { "name": "Month peak cost" },
-      "month_complete_days": { "name": "Month complete days" },
-      "projected_month_cost": { "name": "Projected month cost" },
-      "projected_month_energy_cost": { "name": "Projected month energy cost" },
-      "recent_complete_date": { "name": "Most recent complete date" },
-      "recent_complete_energy": { "name": "Most recent complete day energy" },
-      "recent_complete_cost": { "name": "Most recent complete day cost" },
-      "recent_complete_cheap_energy": { "name": "Most recent complete day cheap energy" },
-      "recent_complete_cheap_cost": { "name": "Most recent complete day cheap cost" },
-      "recent_complete_night_energy": { "name": "Most recent complete day night energy" },
-      "recent_complete_night_cost": { "name": "Most recent complete day night cost" },
-      "recent_complete_day_energy": { "name": "Most recent complete day day energy" },
-      "recent_complete_day_cost": { "name": "Most recent complete day day cost" },
-      "recent_complete_peak_energy": { "name": "Most recent complete day peak energy" },
-      "recent_complete_peak_cost": { "name": "Most recent complete day peak cost" },
-      "last_7_complete_day_cost": { "name": "Cost, last 7 complete days" },
-      "last_7_complete_day_energy": { "name": "Energy, last 7 complete days" },
-      "average_daily_cost_7_day": { "name": "Average daily cost (7 day)" },
-      "average_daily_energy_7_day": { "name": "Average daily energy (7 day)" },
-      "total_export": { "name": "Total export" },
-      "today_export_energy": { "name": "Today export" },
-      "yesterday_export_energy": { "name": "Yesterday export" },
-      "month_export_energy": { "name": "Month export" },
-      "today_export_credit": { "name": "Today export credit" },
-      "month_export_credit": { "name": "Month export credit" }
+      "last_import": {
+        "name": "Last import"
+      },
+      "last_reading": {
+        "name": "Last reading"
+      },
+      "last_reading_age": {
+        "name": "Last reading age"
+      },
+      "records": {
+        "name": "Records"
+      },
+      "coverage_days": {
+        "name": "Coverage days"
+      },
+      "latest_interval_energy": {
+        "name": "Latest interval energy"
+      },
+      "total_import": {
+        "name": "Total import"
+      },
+      "current_rate_bucket": {
+        "name": "Current rate bucket"
+      },
+      "current_rate": {
+        "name": "Current rate"
+      },
+      "today_energy": {
+        "name": "Today energy"
+      },
+      "today_cheap_energy": {
+        "name": "Today cheap energy"
+      },
+      "today_night_energy": {
+        "name": "Today night energy"
+      },
+      "today_day_energy": {
+        "name": "Today day energy"
+      },
+      "today_peak_energy": {
+        "name": "Today peak energy"
+      },
+      "today_cost": {
+        "name": "Today cost"
+      },
+      "today_vat": {
+        "name": "Today VAT"
+      },
+      "today_discount": {
+        "name": "Today discount"
+      },
+      "yesterday_energy": {
+        "name": "Yesterday energy"
+      },
+      "yesterday_cost": {
+        "name": "Yesterday cost"
+      },
+      "month_energy": {
+        "name": "Month energy"
+      },
+      "month_cost": {
+        "name": "Month cost"
+      },
+      "month_net_cost": {
+        "name": "Month net cost"
+      },
+      "month_vat": {
+        "name": "Month VAT"
+      },
+      "month_discount": {
+        "name": "Month discount"
+      },
+      "month_cheap_cost": {
+        "name": "Month cheap cost"
+      },
+      "month_night_cost": {
+        "name": "Month night cost"
+      },
+      "month_day_cost": {
+        "name": "Month day cost"
+      },
+      "month_peak_cost": {
+        "name": "Month peak cost"
+      },
+      "month_complete_days": {
+        "name": "Month complete days"
+      },
+      "projected_month_cost": {
+        "name": "Projected month cost"
+      },
+      "projected_month_energy_cost": {
+        "name": "Projected month energy cost"
+      },
+      "recent_complete_date": {
+        "name": "Most recent complete date"
+      },
+      "recent_complete_energy": {
+        "name": "Most recent complete day energy"
+      },
+      "recent_complete_cost": {
+        "name": "Most recent complete day cost"
+      },
+      "recent_complete_cheap_energy": {
+        "name": "Most recent complete day cheap energy"
+      },
+      "recent_complete_cheap_cost": {
+        "name": "Most recent complete day cheap cost"
+      },
+      "recent_complete_night_energy": {
+        "name": "Most recent complete day night energy"
+      },
+      "recent_complete_night_cost": {
+        "name": "Most recent complete day night cost"
+      },
+      "recent_complete_day_energy": {
+        "name": "Most recent complete day day energy"
+      },
+      "recent_complete_day_cost": {
+        "name": "Most recent complete day day cost"
+      },
+      "recent_complete_peak_energy": {
+        "name": "Most recent complete day peak energy"
+      },
+      "recent_complete_peak_cost": {
+        "name": "Most recent complete day peak cost"
+      },
+      "last_7_complete_day_cost": {
+        "name": "Cost, last 7 complete days"
+      },
+      "last_7_complete_day_energy": {
+        "name": "Energy, last 7 complete days"
+      },
+      "average_daily_cost_7_day": {
+        "name": "Average daily cost (7 day)"
+      },
+      "average_daily_energy_7_day": {
+        "name": "Average daily energy (7 day)"
+      },
+      "total_export": {
+        "name": "Total export"
+      },
+      "today_export_energy": {
+        "name": "Today export"
+      },
+      "yesterday_export_energy": {
+        "name": "Yesterday export"
+      },
+      "month_export_energy": {
+        "name": "Month export"
+      },
+      "today_export_credit": {
+        "name": "Today export credit"
+      },
+      "month_export_credit": {
+        "name": "Month export credit"
+      },
+      "download_status": {
+        "name": "Download status",
+        "state": {
+          "ok": "OK",
+          "failed": "Failed",
+          "captcha_lockout": "Blocked (captcha)",
+          "never_run": "Not run yet"
+        }
+      }
     }
   },
   "services": {
