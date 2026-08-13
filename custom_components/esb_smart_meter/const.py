@@ -58,6 +58,10 @@ DOWNLOAD_STATUS_OK = "ok"
 DOWNLOAD_STATUS_FAILED = "failed"
 DOWNLOAD_STATUS_CAPTCHA = "captcha_lockout"
 DOWNLOAD_STATUS_NEVER = "never_run"
+# Transient state shown on-screen while a login+download is in flight (the login
+# alone takes ~20s), so the UI reflects activity rather than jumping silently
+# from the old state to the result.
+DOWNLOAD_STATUS_RUNNING = "downloading"
 
 DEFAULT_IMPORT_PATH = "/config/esb_energy"
 DEFAULT_TIME_SHIFT_MINUTES = -30

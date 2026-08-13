@@ -54,6 +54,7 @@ from .const import (
     DOWNLOAD_STATUS_FAILED,
     DOWNLOAD_STATUS_NEVER,
     DOWNLOAD_STATUS_OK,
+    DOWNLOAD_STATUS_RUNNING,
     ENERGY_HEADER_MARKER,
     EXPORT_KEYWORD,
     INTERVAL_HOURS,
@@ -207,34 +208,37 @@ class ESBSmartMeterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         # Imported lazily so the optional beautifulsoup4/requests dependency is
         # only touched when the user actually uses the portal download.
-        from .downloader import ESBCaptchaError, ESBDownloadError
+        from .downloader import ESBCaptchaError
+
+        mprn = self.entry.data.get(CONF_MPRN)
+        # Flip the status sensor to "downloading" and push it out before the
+        # ~20s login begins, so the UI shows activity instead of jumping
+        # silently from the old state straight to the result.
+        LOGGER.info("MPRN %s: starting ESB portal download", mprn)
+        self._record_download(DOWNLOAD_STATUS_RUNNING, None)
+        await self.async_refresh()
 
         try:
             rows = await self.hass.async_add_executor_job(self._download_latest)
-        except ESBCaptchaError as err:
-            self._record_download(DOWNLOAD_STATUS_CAPTCHA, str(err))
-            success = False
+        except Exception as err:  # noqa: BLE001 - record status, then re-raise/soften
+            is_captcha = isinstance(err, ESBCaptchaError)
+            status = DOWNLOAD_STATUS_CAPTCHA if is_captcha else DOWNLOAD_STATUS_FAILED
+            LOGGER.warning(
+                "MPRN %s: ESB download %s: %s",
+                mprn,
+                "blocked by captcha" if is_captcha else "failed",
+                err,
+            )
+            self._record_download(status, str(err))
+            await self.async_refresh()
             if raise_on_error:
-                await self.async_request_refresh()
                 raise
-        except ESBDownloadError as err:
-            self._record_download(DOWNLOAD_STATUS_FAILED, str(err))
-            success = False
-            if raise_on_error:
-                await self.async_request_refresh()
-                raise
-        except Exception as err:  # noqa: BLE001 - record then surface/soften
-            self._record_download(DOWNLOAD_STATUS_FAILED, str(err))
-            success = False
-            if raise_on_error:
-                await self.async_request_refresh()
-                raise
-        else:
-            self._record_download(DOWNLOAD_STATUS_OK, None, rows=rows)
-            success = True
+            return False
 
-        await self.async_request_refresh()
-        return success
+        LOGGER.info("MPRN %s: ESB download complete (%s rows)", mprn, rows)
+        self._record_download(DOWNLOAD_STATUS_OK, None, rows=rows)
+        await self.async_refresh()
+        return True
 
     def _record_download(
         self, status: str, error: str | None, *, rows: int | None = None
