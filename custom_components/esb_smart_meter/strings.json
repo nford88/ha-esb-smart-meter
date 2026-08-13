@@ -233,7 +233,8 @@
           "ok": "OK",
           "failed": "Failed",
           "captcha_lockout": "Blocked (captcha)",
-          "never_run": "Not run yet"
+          "never_run": "Not run yet",
+          "downloading": "Downloading…"
         }
       }
     }

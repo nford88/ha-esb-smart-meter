@@ -100,6 +100,7 @@ def _logout(session: requests.Session) -> None:
 
 def download_latest_csv(username: str, password: str, mprn: str) -> ESBDownloadResult:
     """Log in to ESB Networks and download interval CSV data."""
+    LOGGER.info("ESB portal: logging in for MPRN %s", mprn)
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
     try:
@@ -267,6 +268,7 @@ def download_latest_csv(username: str, password: str, mprn: str) -> ESBDownloadR
         )
         response_6.raise_for_status()
 
+        LOGGER.info("ESB portal: logged in for MPRN %s; downloading interval CSV", mprn)
         response_7 = session.get(
             "https://myaccount.esbnetworks.ie/af/t",
             headers={

@@ -20,6 +20,7 @@ from custom_components.esb_smart_meter.const import (
     DOWNLOAD_STATUS_CAPTCHA,
     DOWNLOAD_STATUS_FAILED,
     DOWNLOAD_STATUS_OK,
+    DOWNLOAD_STATUS_RUNNING,
     MIN_INTERVAL_MINUTES,
 )
 from custom_components.esb_smart_meter.coordinator import ESBSmartMeterCoordinator
@@ -61,6 +62,23 @@ async def test_status_recorded_on_success(hass, csv_dir, monkeypatch):
     assert coordinator.last_download_rows == 42
     assert coordinator.last_download_error is None
     assert coordinator.data["download_status"] == DOWNLOAD_STATUS_OK
+
+
+async def test_status_is_downloading_during_fetch(hass, csv_dir, monkeypatch):
+    coordinator = ESBSmartMeterCoordinator(hass, _creds_entry(csv_dir))
+    seen = {}
+
+    def _capture():
+        # The status the UI would show while the (slow) login+download runs.
+        seen["status"] = coordinator.last_download_status
+        return 7
+
+    monkeypatch.setattr(coordinator, "_download_latest", _capture)
+
+    await coordinator.async_download_latest(raise_on_error=False)
+
+    assert seen["status"] == DOWNLOAD_STATUS_RUNNING
+    assert coordinator.last_download_status == DOWNLOAD_STATUS_OK
 
 
 async def test_status_recorded_on_failure(hass, csv_dir, monkeypatch):
