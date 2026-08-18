@@ -15,7 +15,6 @@ only this scheduler does.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import random
 from collections.abc import Callable
@@ -23,7 +22,7 @@ from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later, async_track_time_change
 from homeassistant.util import dt as dt_util
 
@@ -36,7 +35,6 @@ from .const import (
     DEFAULT_INTERVAL_MINUTES,
     DEFAULT_WINDOW_END_HOUR,
     DEFAULT_WINDOW_START_HOUR,
-    DOMAIN,
     DOWNLOAD_MODE_INTERVAL,
     DOWNLOAD_MODE_MANUAL,
     MIN_INTERVAL_MINUTES,
@@ -88,16 +86,13 @@ def _setup_daily_window(
         )
         start, end = DEFAULT_WINDOW_START_HOUR, DEFAULT_WINDOW_END_HOUR
     window_seconds = (end - start) * 3600
+    # Cancel handles for the pending jittered-download and retry timers.
+    handles: dict[str, Callable[[], None] | None] = {"download": None, "retry": None}
 
-    async def _run(_now: Any = None) -> None:
-        jitter = random.randint(0, max(0, window_seconds - 1))
-        LOGGER.info(
-            "ESB %s: daily download window open; downloading in %dh%02dm",
-            coordinator.name,
-            jitter // 3600,
-            (jitter % 3600) // 60,
-        )
-        await asyncio.sleep(jitter)
+    async def _retry(_now: Any = None) -> None:
+        await coordinator.async_download_latest(raise_on_error=False)
+
+    async def _download(_now: Any = None) -> None:
         if await coordinator.async_download_latest(raise_on_error=False):
             return
         retry = random.randint(RETRY_MIN_HOURS * 3600, RETRY_MAX_HOURS * 3600)
@@ -106,18 +101,36 @@ def _setup_daily_window(
             coordinator.name,
             retry / 3600,
         )
-        await asyncio.sleep(retry)
-        await coordinator.async_download_latest(raise_on_error=False)
+        handles["retry"] = async_call_later(hass, retry, _retry)
 
+    @callback
     def _fire(now: Any) -> None:
-        coordinator.next_download_time = _next_daily(start)
-        entry.async_create_background_task(
-            hass, _run(), f"{DOMAIN}_download_{entry.entry_id}"
+        # Random offset inside the window, re-picked each day. Scheduled via
+        # async_call_later — a proper HA timer that is tracked and cancelled on
+        # unload. The previous approach (a background task doing a multi-hour
+        # asyncio.sleep) was garbage-collected mid-sleep by HA, so the download
+        # never ran ("Task was destroyed but it is pending").
+        jitter = random.randint(0, max(0, window_seconds - 1))
+        coordinator.next_download_time = dt_util.now() + timedelta(seconds=jitter)
+        LOGGER.info(
+            "ESB %s: daily download window open; downloading in %dh%02dm",
+            coordinator.name,
+            jitter // 3600,
+            (jitter % 3600) // 60,
         )
+        handles["download"] = async_call_later(hass, jitter, _download)
 
     coordinator.next_download_time = _next_daily(start)
     _maybe_initial_download(hass, entry, coordinator)
-    return async_track_time_change(hass, _fire, hour=start, minute=0, second=0)
+    unsub_time = async_track_time_change(hass, _fire, hour=start, minute=0, second=0)
+
+    def _cancel() -> None:
+        unsub_time()
+        for handle in handles.values():
+            if handle is not None:
+                handle()
+
+    return _cancel
 
 
 def _setup_interval(

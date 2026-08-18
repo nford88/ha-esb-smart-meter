@@ -1,6 +1,7 @@
 """Tests for download-status tracking and the automatic download scheduler."""
 
 import pytest
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.esb_smart_meter import scheduler as sched
@@ -135,7 +136,9 @@ def sched_calls(monkeypatch):
     calls = {"time_change": [], "call_later": []}
 
     def _fake_time_change(hass, action, *, hour=None, minute=None, second=None):
-        calls["time_change"].append({"hour": hour, "minute": minute, "second": second})
+        calls["time_change"].append(
+            {"hour": hour, "minute": minute, "second": second, "action": action}
+        )
         return lambda: None
 
     def _fake_call_later(hass, delay, action):
@@ -169,6 +172,29 @@ async def test_no_credentials_schedules_nothing(hass, csv_dir, sched_calls):
     sched.async_setup_download_schedule(hass, entry, coordinator)
     assert sched_calls["time_change"] == []
     assert sched_calls["call_later"] == []
+
+
+async def test_daily_window_fire_schedules_download_via_timer(hass, csv_dir, sched_calls):
+    # Regression: the window-start callback must schedule the actual download via
+    # async_call_later (a tracked HA timer), NOT a background task doing a
+    # multi-hour asyncio.sleep — which HA garbage-collected mid-sleep so the
+    # download never ran ("Task was destroyed but it is pending").
+    entry = _creds_entry(
+        csv_dir,
+        **{
+            CONF_DOWNLOAD_MODE: DOWNLOAD_MODE_DAILY_WINDOW,
+            CONF_WINDOW_START_HOUR: 9,
+            "download_window_end_hour": 12,
+        },
+    )
+    coordinator = _seeded_coordinator(hass, entry)
+    sched.async_setup_download_schedule(hass, entry, coordinator)
+
+    fire = sched_calls["time_change"][0]["action"]
+    fire(dt_util.now())  # simulate the 09:00 trigger
+
+    delays = [c["delay"] for c in sched_calls["call_later"]]
+    assert any(0 <= d < (12 - 9) * 3600 for d in delays)
 
 
 async def test_daily_window_registers_time_change(hass, csv_dir, sched_calls):
