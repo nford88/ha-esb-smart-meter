@@ -39,7 +39,31 @@ from .const import (
 )
 from .coordinator import ESBSmartMeterCoordinator
 
+try:
+    from homeassistant.components.recorder.models import StatisticMeanType
+
+    _MEAN_TYPE_NONE = StatisticMeanType.NONE
+except ImportError:
+    # Older HA versions have no StatisticMeanType; mean_type is optional there.
+    _MEAN_TYPE_NONE = None
+
 LOGGER = logging.getLogger(__name__)
+
+
+def _sum_metadata(*, name: str, statistic_id: str, unit: str) -> StatisticMetaData:
+    """Build sum-only statistics metadata, including mean_type on HA versions that
+    require it (mandatory from HA 2026.11)."""
+    metadata = StatisticMetaData(
+        has_mean=False,
+        has_sum=True,
+        name=name,
+        source=DOMAIN,
+        statistic_id=statistic_id,
+        unit_of_measurement=unit,
+    )
+    if _MEAN_TYPE_NONE is not None:
+        metadata["mean_type"] = _MEAN_TYPE_NONE
+    return metadata
 
 
 @dataclass(frozen=True)
@@ -165,25 +189,19 @@ async def _write_pair(
 
     async_add_external_statistics(
         hass,
-        StatisticMetaData(
-            has_mean=False,
-            has_sum=True,
+        _sum_metadata(
             name=f"{coordinator.name} {energy_label}",
-            source=DOMAIN,
             statistic_id=energy_id,
-            unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            unit=UnitOfEnergy.KILO_WATT_HOUR,
         ),
         energy_stats,
     )
     async_add_external_statistics(
         hass,
-        StatisticMetaData(
-            has_mean=False,
-            has_sum=True,
+        _sum_metadata(
             name=f"{coordinator.name} {money_label}",
-            source=DOMAIN,
             statistic_id=money_id,
-            unit_of_measurement=coordinator.currency,
+            unit=coordinator.currency,
         ),
         money_stats,
     )
@@ -197,9 +215,7 @@ async def _write_pair(
     return len(energy_stats)
 
 
-async def _resume_from(
-    hass: HomeAssistant, energy_id: str, money_id: str
-) -> _Resume:
+async def _resume_from(hass: HomeAssistant, energy_id: str, money_id: str) -> _Resume:
     """Work out where to resume a statistics pair from.
 
     The two series are written together and must stay in lockstep. If either is
