@@ -2,4 +2,4 @@
 # Home Assistant + pytest stack; it is intentionally unpinned so CI always runs
 # against the current Home Assistant release.
 pytest-homeassistant-custom-component
-beautifulsoup4==4.12.3
+beautifulsoup4>=4.12.3
