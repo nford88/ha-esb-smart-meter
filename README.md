@@ -65,12 +65,12 @@ have the interval CSV files this integration reads.
 
 Use these steps if you already have HACS installed in Home Assistant.
 
-[![Open your Home Assistant instance and add this repository to HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=gerbear1990&repository=ha-esb-smart-meter&category=integration)
+[![Open your Home Assistant instance and add this repository to HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nford88&repository=ha-esb-smart-meter&category=integration)
 
 1. Click the button above.
 2. Choose your Home Assistant instance if prompted.
 3. Confirm the repository details:
-   - Repository: `gerbear1990/ha-esb-smart-meter`
+   - Repository: `nford88/ha-esb-smart-meter`
    - Category: `Integration`
 4. Add the repository to HACS.
 5. In HACS, download `ESB Smart Meter`.

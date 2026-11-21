@@ -241,3 +241,15 @@ async def test_refresh_picks_up_new_hours(hass, tmp_path):
     await hass.async_block_till_done()
 
     assert await _sums(hass, ENERGY_ID) == [(1.0, 1.0), (3.0, 4.0)]
+
+
+def test_sum_metadata_sets_unit_class():
+    """unit_class is mandatory from HA 2026.11 for async_add_external_statistics."""
+    from homeassistant.const import UnitOfEnergy
+
+    from custom_components.esb_smart_meter.statistics import _sum_metadata
+
+    energy = _sum_metadata(name="e", statistic_id="esb_smart_meter:x", unit=UnitOfEnergy.KILO_WATT_HOUR)
+    money = _sum_metadata(name="m", statistic_id="esb_smart_meter:y", unit="EUR")
+    assert energy["unit_class"] == "energy"
+    assert money["unit_class"] is None

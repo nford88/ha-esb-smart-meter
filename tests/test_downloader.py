@@ -102,7 +102,7 @@ class FakeSession:
             return FakeResponse(text=self._confirmed_body, url=url)
         if url == "https://myaccount.esbnetworks.ie":
             return FakeResponse(url=url)
-        if url.endswith("/Api/HistoricConsumption"):
+        if url.endswith("/energymanagement/historic-consumption"):
             return FakeResponse(url=url)
         if url.endswith("/af/t"):
             return FakeResponse(text='{"token":"XSRF"}', url=url)
@@ -198,3 +198,19 @@ def test_login_shell_raises_download_error_with_page_identity(monkeypatch):
     assert "CombinedSigninAndSignup" in message
     # a plain shell is not a captcha
     assert not isinstance(excinfo.value, downloader.ESBCaptchaError)
+
+
+def test_uses_energymanagement_endpoints(monkeypatch):
+    """ESB moved consumption under /energymanagement/ (late Oct 2026); the old
+    /Api/HistoricConsumption and /DataHub/DownloadHdfPeriodic now 404."""
+    fake = FakeSession()
+    _run(fake, monkeypatch)
+    page = "https://myaccount.esbnetworks.ie/energymanagement/historic-consumption"
+    assert fake.has("GET", page)
+    url, kw = fake.find("POST", "/DownloadHdfPeriodic")
+    assert url == (
+        "https://myaccount.esbnetworks.ie/energymanagement/api/consumption/DownloadHdfPeriodic"
+    )
+    assert kw["headers"]["X-Returnurl"] == page
+    assert not fake.has("GET", "/Api/HistoricConsumption")
+    assert not fake.has("POST", "/DataHub/")

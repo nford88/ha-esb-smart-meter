@@ -63,6 +63,9 @@ def _sum_metadata(*, name: str, statistic_id: str, unit: str) -> StatisticMetaDa
     )
     if _MEAN_TYPE_NONE is not None:
         metadata["mean_type"] = _MEAN_TYPE_NONE
+    # unit_class is mandatory from HA 2026.11; "energy" lets HA convert kWh,
+    # currency has no converter so it is None.
+    metadata["unit_class"] = "energy" if unit == UnitOfEnergy.KILO_WATT_HOUR else None
     return metadata
 
 
